@@ -44,10 +44,14 @@ func TestValidate_RangeChecks(t *testing.T) {
 		{"adc-init below", func(v *eeprom.View) { v.ADCInitVolume = -13 }, eeprom.FieldADCInitVolume, true},
 		{"adc-init above", func(v *eeprom.View) { v.ADCInitVolume = 24 }, eeprom.FieldADCInitVolume, true},
 
-		// aa-init-volume: -23..8
-		{"aa-init lower ok", func(v *eeprom.View) { v.AAInitVolume = -23 }, eeprom.FieldAAInitVolume, false},
+		// aa-init-volume: intersection of datasheet doc range (-23..+8) and
+		// the 5-bit signed encoder's faithful range (-16..15) = -16..8.
+		// See validate.go init-volume comment for why the lower bound is
+		// pinned at -16 rather than the datasheet's -23.
+		{"aa-init lower ok", func(v *eeprom.View) { v.AAInitVolume = -16 }, eeprom.FieldAAInitVolume, false},
 		{"aa-init upper ok", func(v *eeprom.View) { v.AAInitVolume = 8 }, eeprom.FieldAAInitVolume, false},
-		{"aa-init below", func(v *eeprom.View) { v.AAInitVolume = -24 }, eeprom.FieldAAInitVolume, true},
+		{"aa-init below", func(v *eeprom.View) { v.AAInitVolume = -17 }, eeprom.FieldAAInitVolume, true},
+		{"aa-init below datasheet", func(v *eeprom.View) { v.AAInitVolume = -23 }, eeprom.FieldAAInitVolume, true},
 		{"aa-init above", func(v *eeprom.View) { v.AAInitVolume = 9 }, eeprom.FieldAAInitVolume, true},
 
 		// min/max overrides: -128..127

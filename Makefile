@@ -44,6 +44,10 @@ vet: ## Run go vet against code.
 build: fmt vet ## Build the openvlm CLI binary.
 	GOCACHE=$(HOME)/.gocache go build -trimpath -buildvcs=false -ldflags="-s -w" -o bin/openvlm .
 
+.PHONY: cgobuild
+cgobuild: fmt vet ## Build the openvlm CLI binary with CGO_ENABLED=1.
+	CGO_ENABLED=1 GOCACHE=$(HOME)/.gocache go build -trimpath -buildvcs=false -ldflags="-s -w" -o bin/openvlm .
+
 .PHONY: run
 run: fmt vet ## Run the CLI from your host (forwards args via ARGS=...).
 	go run . $(ARGS)

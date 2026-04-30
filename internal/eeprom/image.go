@@ -247,8 +247,14 @@ func signExtend(value, width int) int {
 	return value - (1 << width)
 }
 
-// encodeSigned packs a signed int into a `width`-bit two's complement field
-// (no range check; validate first).
+// encodeSigned packs a signed int into a `width`-bit two's complement field.
+//
+// CALLER CONTRACT: value must already be in the field's representable range
+// (-(1<<(width-1)) .. (1<<(width-1))-1). Out-of-range values are silently
+// masked, producing whatever bit pattern the low `width` bits happen to be —
+// validate first. The init-volume validator in validate.go is the single
+// upstream gate; widening any of dac/adc/aaInitMin/Max past the bit-field
+// range will reintroduce silent corruption. See plan Phase G.
 func encodeSigned(value, width int) uint16 {
 	mask := uint16((1 << width) - 1)
 
