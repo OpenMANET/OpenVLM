@@ -14,17 +14,10 @@ func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 
 //nolint:gochecknoglobals // cobra command literal
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List every CM108-family device matching the OpenVLM VID/PID",
-	Long: `list enumerates every USB HID device matching the OpenVLM USB IDs
-(VID 0x0D8C, PID 0x0012). For each match it probes the GPIO1 strap and
-reports whether the device is positively identified as OpenVLM hardware.
-
-Exit status:
-  0  at least one matching device was found
-  1  no matching device found
-`,
-	RunE: runList,
+	Use:   useList,
+	Short: shortList,
+	Long:  longList,
+	RunE:  runList,
 }
 
 func runList(cmd *cobra.Command, _ []string) error {
@@ -34,14 +27,12 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(descs) == 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no OpenVLM devices found")
-
-		return fmt.Errorf("no devices found")
+		return fmt.Errorf("%w", cm108.ErrNoDevice)
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(w, "SERIAL\tPATH\tOPENVLM\tNOTE")
+	fmt.Fprintln(w, "Serial\tDevice\tOpenVLM?\tNotes")
 
 	for _, d := range descs {
 		note := ""

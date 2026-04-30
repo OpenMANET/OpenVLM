@@ -15,27 +15,15 @@ var dumpFormat string
 
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(dumpCmd)
-	dumpCmd.Flags().StringVar(&dumpFormat, "format", "yaml",
-		"output format: yaml|text|hex")
+	dumpCmd.Flags().StringVar(&dumpFormat, "format", "yaml", flagDumpFormatHelp)
 }
 
 //nolint:gochecknoglobals // cobra command literal
 var dumpCmd = &cobra.Command{
-	Use:   "dump",
-	Short: "Decode the live EEPROM as YAML, text, or hex",
-	Long: `dump reads the EEPROM and decodes it into a human-readable form.
-
-Formats:
-  yaml  PartialView round-trip (default); pipe into 'openvlm provision --overrides -' to reapply
-  text  human table grouped by datasheet section, including write-locked strings
-  hex   raw 128-byte hex dump for diagnostics
-
-Examples:
-  openvlm dump
-  openvlm dump --format text
-  openvlm dump --format hex
-`,
-	RunE: runDump,
+	Use:   useDump,
+	Short: shortDump,
+	Long:  longDump,
+	RunE:  runDump,
 }
 
 func runDump(cmd *cobra.Command, _ []string) error {
@@ -59,15 +47,13 @@ func runDump(cmd *cobra.Command, _ []string) error {
 	case "hex":
 		return printDumpHex(cmd, &img)
 	default:
-		return &usageError{err: fmt.Errorf("unknown --format %q (use yaml, text, or hex)", dumpFormat)}
+		return &usageError{err: fmt.Errorf("unknown --format %q. Use yaml, text, or hex", dumpFormat)}
 	}
 }
 
 func printDumpText(cmd *cobra.Command, d cm108.Descriptor, img *eeprom.Image) error {
 	if !img.IsProgrammed() {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-			"warning: image magic word missing — chip looks unprogrammed (read VID:PID 0x%04X:0x%04X)\n",
-			img.VID(), img.PID())
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), msgChipBlank(flagVerbose, img.VID(), img.PID()))
 	}
 
 	view, warnings, decodeErr := img.Decode()
@@ -125,7 +111,7 @@ func printDumpYAML(cmd *cobra.Command, img *eeprom.Image) error {
 	}
 
 	if _, err := cmd.OutOrStdout().Write(data); err != nil {
-		return fmt.Errorf("write yaml: %w", err)
+		return fmt.Errorf("couldn't write YAML: %w", err)
 	}
 
 	return nil
@@ -134,11 +120,11 @@ func printDumpYAML(cmd *cobra.Command, img *eeprom.Image) error {
 func printDumpHex(cmd *cobra.Command, img *eeprom.Image) error {
 	dumper := hex.Dumper(cmd.OutOrStdout())
 	if _, err := dumper.Write(img[:]); err != nil {
-		return fmt.Errorf("write hex: %w", err)
+		return fmt.Errorf("couldn't write hex: %w", err)
 	}
 
 	if err := dumper.Close(); err != nil {
-		return fmt.Errorf("close hex dumper: %w", err)
+		return fmt.Errorf("couldn't finish hex output: %w", err)
 	}
 
 	return nil

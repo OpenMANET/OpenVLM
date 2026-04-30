@@ -296,3 +296,142 @@ func decodeBytes(b [eeprom.ByteCount]byte) (eeprom.View, []string, error) {
 
 	return img.Decode() //nolint:wrapcheck // test helper passes through verbatim
 }
+
+// runRoot executes rootCmd with capture-buffers wired in. Tests that need
+// to assert on the printed text (as opposed to the returned error) use this
+// instead of poking rootCmd directly.
+func runRoot(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+
+	var (
+		out    bytes.Buffer
+		errBuf bytes.Buffer
+	)
+
+	rootCmd.SetArgs(args)
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&errBuf)
+
+	err = rootCmd.Execute()
+
+	return out.String(), errBuf.String(), err
+}
+
+// TestProvision_FriendlyOutput pins the success-message wording on the
+// happy path. If a future tone change drifts this string, the test calls
+// it out instead of letting it slip silently into a release.
+func TestProvision_FriendlyOutput(t *testing.T) {
+	withFakeBackend(t)
+	resetOverrides()
+	resetProvisionFlags()
+
+	stdout, _, err := runRoot(t, "provision")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "applied the OpenVLM defaults")
+}
+
+// TestIdentify_FriendlySuccess pins the confirmed-OpenVLM line.
+func TestIdentify_FriendlySuccess(t *testing.T) {
+	withFakeBackend(t)
+	resetOverrides()
+
+	stdout, _, err := runRoot(t, "identify")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "this is an OpenVLM dongle")
+}
+
+// TestUpdate_FriendlySuccess pins the updated-field line.
+func TestUpdate_FriendlySuccess(t *testing.T) {
+	withFakeBackend(t)
+	resetOverrides()
+
+	stdout, _, err := runRoot(t, "update", "serial", "Friendly2")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "updated serial")
+}
+
+// TestWipe_FriendlySuccess pins the post-wipe line, including the
+// "unplug and plug back in" instruction (which non-technical users
+// need; without it they assume the wipe failed).
+func TestWipe_FriendlySuccess(t *testing.T) {
+	withFakeBackend(t)
+	resetOverrides()
+	resetWipeFlags()
+
+	stdout, _, err := runRoot(t, "wipe", "--yes")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "erased")
+	assert.Contains(t, stdout, "Unplug and plug back in")
+}
+
+// TestProvision_DryRunFriendlyMessage pins the dry-run preface.
+func TestProvision_DryRunFriendlyMessage(t *testing.T) {
+	withFakeBackend(t)
+	resetOverrides()
+	resetProvisionFlags()
+
+	_, stderr, err := runRoot(t, "provision", "--dry-run")
+	require.NoError(t, err)
+	assert.Contains(t, stderr, "Dry-run: would write")
+	assert.Contains(t, stderr, "No changes made.")
+}
+
+// TestNoDongles_FriendlyError verifies the cm108.ErrNoDevice translation
+// fires end-to-end, with the action hint appended.
+func TestNoDongles_FriendlyError(t *testing.T) {
+	// Empty fake backend — no devices registered.
+	prev := SetBackend(hidx.NewFakeBackend())
+
+	t.Cleanup(func() { SetBackend(prev) })
+
+	resetOverrides()
+	resetWipeFlags()
+
+	_, _, err := runRoot(t, "list")
+	require.Error(t, err)
+
+	got := friendlyError(err, false)
+	assert.Contains(t, got, "No OpenVLM dongles are plugged in")
+	assert.Contains(t, got, "Plug one in")
+}
+
+// TestStrapLow_FriendlyError verifies the not-OpenVLM device error reads
+// as a sentence with an actionable hint.
+func TestStrapLow_FriendlyError(t *testing.T) {
+	state := withFakeBackend(t)
+	state.SetGPIO1(false)
+
+	resetOverrides()
+
+	_, _, err := runRoot(t, "identify")
+	require.Error(t, err)
+
+	got := friendlyError(err, false)
+	assert.Contains(t, got, "this doesn't look like an OpenVLM dongle")
+}
+
+// TestVerbose_PreservesInternalDetail confirms --verbose surfaces the
+// kind of low-level wording (in this case the field name + range) that
+// the default mode keeps but the friendly translator can omit prefixes
+// from. This is the contract that makes verbose useful for bug reports.
+func TestVerbose_PreservesInternalDetail(t *testing.T) {
+	withFakeBackend(t)
+	resetOverrides()
+
+	// Out-of-range value should fail validation. The error from eeprom
+	// has the "eeprom:" prefix; verbose preserves it, default strips it.
+	_, _, errDefault := runRoot(t, "update", "dac-init-volume", "999")
+	require.Error(t, errDefault)
+
+	defaultMsg := friendlyError(errDefault, false)
+	verboseMsg := friendlyError(errDefault, true)
+
+	assert.Contains(t, defaultMsg, "out of range",
+		"default mode should still surface the substantive error")
+	assert.NotContains(t, defaultMsg, "eeprom:",
+		"default mode should strip the internal package prefix")
+
+	assert.Contains(t, verboseMsg, "eeprom:",
+		"verbose mode should preserve the internal package prefix")
+	assert.Contains(t, verboseMsg, "out of range")
+}

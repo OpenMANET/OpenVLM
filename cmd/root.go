@@ -33,20 +33,9 @@ var (
 
 //nolint:gochecknoglobals // rootCmd is the canonical cobra entry point
 var rootCmd = &cobra.Command{
-	Use:   "openvlm",
-	Short: "Read, write, and validate the EEPROM on OpenVLM USB dongles",
-	Long: `openvlm is a cross-platform CLI for the OpenVLM USB audio dongle
-(C-Media CM108B with a GPIO1 hardware strap).
-
-It can:
-  - enumerate attached OpenVLM devices                 (openvlm list)
-  - confirm a device is OpenVLM-strapped               (openvlm identify)
-  - dump the live EEPROM as bytes, YAML, or hex        (openvlm read | dump)
-  - program the EEPROM from a file or YAML overrides   (openvlm write)
-  - change a single EEPROM field                       (openvlm update)
-  - apply the compiled-in factory defaults             (openvlm provision)
-
-Run 'openvlm <verb> --help' for per-verb usage.`,
+	Use:           "openvlm",
+	Short:         shortRoot,
+	Long:          longRoot,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -57,16 +46,14 @@ func Execute() {
 	rootCmd.Version = formatVersion()
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "openvlm:", err)
+		fmt.Fprintln(os.Stderr, friendlyError(err, flagVerbose))
 		os.Exit(exitCodeFor(err))
 	}
 }
 
 func init() { //nolint:gochecknoinits // cobra commands self-register here by convention
-	rootCmd.PersistentFlags().StringVar(&flagSerial, "serial", "",
-		"select the device whose USB serial-number string matches this value")
-	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false,
-		"log each HID transfer for diagnostics")
+	rootCmd.PersistentFlags().StringVar(&flagSerial, "serial", "", flagSerialHelp)
+	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, flagVerboseHelp)
 }
 
 func formatVersion() string {

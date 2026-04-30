@@ -1,3 +1,4 @@
+version: 2
 env:
   - GO111MODULE=on
 before:
@@ -25,6 +26,17 @@ builds:
   - id: darwin
     env:
       - CGO_ENABLED=1
+    overrides:
+      - goos: darwin
+        goarch: amd64
+        env:
+          - CC=o64-clang
+          - CXX=o64-clang++
+      - goos: darwin
+        goarch: arm64
+        env:
+          - CC=oa64-clang
+          - CXX=oa64-clang++
     ldflags:
       - '-s -w'
       - '-X github.com/openmanet/openvlm/cmd.Version={{.Version}}'
@@ -73,6 +85,6 @@ archives:
   - name_template: '{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
     format_overrides:
     - goos: windows
-      format: zip
+      formats: [zip]
     files:
       - README.md

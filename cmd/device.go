@@ -50,13 +50,13 @@ func openDevice() (cm108.Descriptor, hidx.Transport, error) {
 
 	t, err := backend.Open(d.Path)
 	if err != nil {
-		return d, nil, fmt.Errorf("open %s: %w", d.Path, err)
+		return d, nil, fmt.Errorf("couldn't open %s: %w", d.Path, err)
 	}
 
 	return d, t, nil
 }
 
-// requireOpenVLM enforces the GPIO1 strap safety gate used by every write
+// requireOpenVLM enforces the identity-bit safety gate used by every write
 // path. force=true (set by --force) skips the gate but still surfaces the
 // non-confirmation in stderr so the user is aware.
 func requireOpenVLM(d cm108.Descriptor, force bool) error {
@@ -65,18 +65,19 @@ func requireOpenVLM(d cm108.Descriptor, force bool) error {
 	}
 
 	if force {
-		_, _ = fmt.Fprintln(rootCmd.ErrOrStderr(),
-			"openvlm: warning: GPIO1 strap not confirmed; --force in effect, proceeding anyway")
+		_, _ = fmt.Fprintln(rootCmd.ErrOrStderr(), msgForceWarning())
 
 		return nil
 	}
 
-	reason := "GPIO1 strap reads low"
+	name := displayName(d.SerialNumber, d.Path)
+
+	reason := "this doesn't look like an OpenVLM dongle (its identity bit isn't set)"
 	if d.ProbeError != nil {
-		reason = "GPIO1 probe failed: " + d.ProbeError.Error()
+		reason = "couldn't check the dongle's identity bit: " + d.ProbeError.Error()
 	}
 
 	return &notIdentifiedError{
-		err: fmt.Errorf("device at %s: %s; pass --force to override", d.Path, reason),
+		err: fmt.Errorf("%s: %s. Pass --force to program it anyway", name, reason),
 	}
 }

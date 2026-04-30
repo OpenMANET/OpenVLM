@@ -20,40 +20,19 @@ var (
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(provisionCmd)
 
-	provisionCmd.Flags().StringVar(&provisionOverridesPath, "overrides", "",
-		"YAML file whose keys override the compiled-in defaults")
-	provisionCmd.Flags().BoolVar(&provisionDryRun, "dry-run", false,
-		"print the encoded image and exit without touching the device")
-	provisionCmd.Flags().BoolVar(&provisionForce, "force", false,
-		"bypass the GPIO1 strap safety gate (allows programming a fresh dongle)")
+	provisionCmd.Flags().StringVar(&provisionOverridesPath, "overrides", "", flagProvisionOverridesHelp)
+	provisionCmd.Flags().BoolVar(&provisionDryRun, "dry-run", false, flagProvisionDryRunHelp)
+	provisionCmd.Flags().BoolVar(&provisionForce, "force", false, flagProvisionForceHelp)
 
 	registerOverrideFlags(provisionCmd)
 }
 
 //nolint:gochecknoglobals // cobra command literal
 var provisionCmd = &cobra.Command{
-	Use:   "provision",
-	Short: "Write the compiled-in OpenVLM defaults, with optional overrides",
-	Long: `provision writes the compiled-in OpenVLMDefaults image to the
-device. Defaults can be overridden in two layered channels (CLI flags win
-over YAML, YAML wins over compiled defaults):
-
-  --overrides factory.yaml     YAML file with any subset of fields
-  --<field-name> <value>       Per-field flag (one per documented field)
-
-Examples:
-  openvlm provision
-  openvlm provision --serial "00001234"
-  openvlm provision --overrides factory.yaml
-  openvlm provision --overrides factory.yaml --dac-init-volume -6
-  openvlm provision --dry-run
-  openvlm provision --force                    # fresh dongle, no GPIO1 strap
-
-VID, PID, product-string, and manufacturer-string cannot be set; they are
-sourced from the compiled-in OpenVLM defaults. The validator runs before
-any HID transfer; bad values exit non-zero with no device side-effects.
-`,
-	RunE: runProvision,
+	Use:   useProvision,
+	Short: shortProvision,
+	Long:  longProvision,
+	RunE:  runProvision,
 }
 
 func runProvision(cmd *cobra.Command, _ []string) error {
@@ -71,7 +50,7 @@ func runProvision(cmd *cobra.Command, _ []string) error {
 	img := merged.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 
 	if provisionDryRun {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dry-run: would write %d bytes\n", len(img))
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), msgDryRun(len(img)))
 
 		dumper := hex.Dumper(cmd.OutOrStdout())
 		_, _ = dumper.Write(img[:])
@@ -94,9 +73,19 @@ func runProvision(cmd *cobra.Command, _ []string) error {
 		return wErr //nolint:wrapcheck // already prefixed
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: provisioned\n", d.Path)
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), msgProvisioned(displayName(d.SerialNumber, d.Path)))
 
 	return nil
+}
+
+// resetProvisionFlags clears the package-level flag state for provision.
+// Cobra retains flag values across rootCmd.Execute() calls within the same
+// process, so tests must reset before each run; production code only
+// Execute()s once so this never runs outside tests.
+func resetProvisionFlags() {
+	provisionOverridesPath = ""
+	provisionDryRun = false
+	provisionForce = false
 }
 
 func buildMergedView(cmd *cobra.Command) (eeprom.View, error) {
@@ -105,7 +94,7 @@ func buildMergedView(cmd *cobra.Command) (eeprom.View, error) {
 	if provisionOverridesPath != "" {
 		data, err := os.ReadFile(provisionOverridesPath)
 		if err != nil {
-			return merged, fmt.Errorf("read --overrides: %w", err)
+			return merged, fmt.Errorf("couldn't read --overrides file: %w", err)
 		}
 
 		yp, err := eeprom.UnmarshalPartial(data)

@@ -10,24 +10,18 @@ jobs:
     name: "Release"
     runs-on: ubuntu-latest
     permissions: write-all
+    container:
+      image: goreleaser/goreleaser-cross:v1.26.2-3-v2.15.4
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0  # Fetch all history for all tags
+          fetch-depth: 0
           submodules: 'recursive'
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Install Dependencies
-        run: sudo apt update && sudo apt install -y build-essential pkg-config libhidapi-dev libusb-1.0-0-dev libudev-dev
+      - name: Mark workspace as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args : release --clean
+        run: goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -17,48 +17,23 @@ var (
 
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(wipeCmd)
-	wipeCmd.Flags().BoolVar(&wipeYes, "yes", false,
-		"required confirmation flag — wipe will refuse to run without this")
-	wipeCmd.Flags().BoolVar(&wipeForce, "force", false,
-		"bypass the GPIO1 strap safety gate (allows wiping a fresh dongle)")
-	wipeCmd.Flags().StringVar(&wipePattern, "pattern", "FF",
-		"byte pattern to write to every word: FF (default, virgin-chip state) or 00")
+	wipeCmd.Flags().BoolVar(&wipeYes, "yes", false, flagWipeYesHelp)
+	wipeCmd.Flags().BoolVar(&wipeForce, "force", false, flagWipeForceHelp)
+	wipeCmd.Flags().StringVar(&wipePattern, "pattern", "FF", flagWipePatternHelp)
 }
 
 //nolint:gochecknoglobals // cobra command literal
 var wipeCmd = &cobra.Command{
-	Use:   "wipe",
-	Short: "Erase the EEPROM by writing 0xFFFF (or 0x0000) to every word",
-	Long: `wipe writes a uniform pattern to every byte of the 93C46 EEPROM,
-returning the chip to a state indistinguishable from factory blank.
-
-After a successful wipe:
-  - The magic word at 0x00 is invalid (no longer 0x670X), so the CM108B
-    falls back to its internal-ROM USB descriptors on the next enumeration.
-  - The GPIO1 strap probe will start failing, since 'IsOpenVLM' relies on
-    the strap reading high after the chip has been programmed at least
-    once. Re-provisioning a wiped device requires --force.
-
-Safety:
-  - --yes is REQUIRED. Wipe will refuse to run otherwise. There is no
-    interactive prompt; the flag is the prompt.
-  - --force is REQUIRED if the GPIO1 strap is not confirmed (typical for
-    bench-clearing or recovery work).
-  - VID/PID write-lock is intentionally bypassed for this verb — wiping
-    the identity bytes is the whole point.
-
-Examples:
-  openvlm wipe --yes
-  openvlm wipe --yes --pattern 00
-  openvlm wipe --yes --force        # post-provision strap-low devices
-`,
-	RunE: runWipe,
+	Use:   useWipe,
+	Short: shortWipe,
+	Long:  longWipe,
+	RunE:  runWipe,
 }
 
 func runWipe(cmd *cobra.Command, _ []string) error {
 	if !wipeYes {
 		return &usageError{err: fmt.Errorf(
-			"wipe requires --yes (this is a destructive operation; the flag is the confirmation)")}
+			"wipe needs --yes to run. This erases the dongle's configuration; the flag is the confirmation")}
 	}
 
 	pattern, err := parseWipePattern(wipePattern)
@@ -81,9 +56,7 @@ func runWipe(cmd *cobra.Command, _ []string) error {
 		return wErr //nolint:wrapcheck // already prefixed by eeprom
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-		"%s: wiped all %d words to 0x%04X (re-enumerate to apply)\n",
-		d.Path, eeprom.WordCount, pattern)
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), msgWiped(displayName(d.SerialNumber, d.Path)))
 
 	return nil
 }
@@ -109,5 +82,5 @@ func parseWipePattern(s string) (uint16, error) {
 		return 0x0000, nil
 	}
 
-	return 0, fmt.Errorf("--pattern %q is not one of: FF, 00", s)
+	return 0, fmt.Errorf("--pattern %q isn't one of: FF, 00", s)
 }

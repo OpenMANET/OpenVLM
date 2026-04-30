@@ -12,21 +12,10 @@ func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 
 //nolint:gochecknoglobals // cobra command literal
 var identifyCmd = &cobra.Command{
-	Use:   "identify",
-	Short: "Confirm a device's OpenVLM strap (exit 0 if confirmed, 3 if not)",
-	Long: `identify opens the selected device, probes the GPIO1 strap, and
-prints the result. Useful in shell scripts:
-
-  if openvlm identify; then
-    openvlm provision
-  fi
-
-Exit status:
-  0  device confirmed as OpenVLM (GPIO1 strap high)
-  1  device or HID transfer error (no devices, permission denied, ...)
-  3  device present but GPIO1 strap is low (not OpenVLM hardware)
-`,
-	RunE: runIdentify,
+	Use:   useIdentify,
+	Short: shortIdentify,
+	Long:  longIdentify,
+	RunE:  runIdentify,
 }
 
 func runIdentify(cmd *cobra.Command, _ []string) error {
@@ -35,19 +24,20 @@ func runIdentify(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	name := displayName(d.SerialNumber, d.Path)
+
 	if d.ProbeError != nil {
-		return fmt.Errorf("probe %s: %w", d.Path, d.ProbeError)
+		return fmt.Errorf("couldn't probe %s: %w", name, d.ProbeError)
 	}
 
 	if !d.IsOpenVLM {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: NOT confirmed\n", d.Path)
-
 		return &notIdentifiedError{
-			err: fmt.Errorf("%s: GPIO1 strap low", d.Path),
+			err: fmt.Errorf("%s: this doesn't look like an OpenVLM dongle (its identity bit isn't set)",
+				name),
 		}
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: confirmed OpenVLM\n", d.Path)
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), msgIdentified(name))
 
 	return nil
 }

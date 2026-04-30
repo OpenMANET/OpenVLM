@@ -19,39 +19,17 @@ var (
 
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(writeCmd)
-	writeCmd.Flags().StringVarP(&writeInput, "input", "i", "",
-		"input file: 128-byte raw .bin (matches `read` output) or YAML "+
-			"(matches `dump --format yaml`); use - for stdin")
-	writeCmd.Flags().BoolVar(&writeForce, "force", false,
-		"bypass the GPIO1 strap safety gate (allows programming a fresh dongle)")
+	writeCmd.Flags().StringVarP(&writeInput, "input", "i", "", flagWriteInputHelp)
+	writeCmd.Flags().BoolVar(&writeForce, "force", false, flagWriteForceHelp)
 	_ = writeCmd.MarkFlagRequired("input")
 }
 
 //nolint:gochecknoglobals // cobra command literal
 var writeCmd = &cobra.Command{
-	Use:   "write",
-	Short: "Write a 128-byte image (raw .bin or YAML) to the device",
-	Long: `write programs the EEPROM from a complete image.
-
-Input formats are auto-detected:
-  - exactly 128 bytes long → raw image (matches 'read' output)
-  - anything else          → YAML overrides (parsed as PartialView and
-                              merged onto OpenVLMDefaults so partial files
-                              are accepted)
-
-Behavior:
-  - Decodes the input, runs the validator, refuses on any error.
-  - VID/PID in raw images must equal the OpenVLM constants. Mismatch is
-    a hard error even with --force.
-  - Writes word-by-word and reads back to verify each one.
-
-Examples:
-  openvlm write -i image.bin
-  openvlm write -i config.yaml
-  openvlm write -i config.yaml --force
-  openvlm dump --format yaml | openvlm write -i -
-`,
-	RunE: runWrite,
+	Use:   useWrite,
+	Short: shortWrite,
+	Long:  longWrite,
+	RunE:  runWrite,
 }
 
 func runWrite(cmd *cobra.Command, _ []string) error {
@@ -89,7 +67,7 @@ func runWrite(cmd *cobra.Command, _ []string) error {
 		return wErr //nolint:wrapcheck // already prefixed
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: wrote %d bytes (verified)\n", d.Path, len(img))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), msgWritten(displayName(d.SerialNumber, d.Path), len(img)))
 
 	return nil
 }
@@ -98,7 +76,7 @@ func readWriteInput(cmd *cobra.Command, path string) ([]byte, error) {
 	if path == "-" {
 		data, err := io.ReadAll(cmd.InOrStdin())
 		if err != nil {
-			return nil, fmt.Errorf("read stdin: %w", err)
+			return nil, fmt.Errorf("couldn't read from stdin: %w", err)
 		}
 
 		return data, nil
@@ -106,7 +84,7 @@ func readWriteInput(cmd *cobra.Command, path string) ([]byte, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
+		return nil, fmt.Errorf("couldn't read %s: %w", path, err)
 	}
 
 	return data, nil
@@ -128,8 +106,8 @@ func imageFromInput(data []byte) (eeprom.Image, error) {
 	// before any binary byte), treat it as such.
 	if !looksLikeYAML(data) {
 		return eeprom.Image{}, &usageError{err: fmt.Errorf(
-			"input is %d bytes, expected exactly %d for a raw image, "+
-				"and does not look like YAML",
+			"that file is %d bytes — expected exactly %d for a binary backup, "+
+				"and it doesn't look like a YAML config either",
 			len(data), eeprom.ByteCount)}
 	}
 

@@ -13,35 +13,16 @@ var updateForce bool
 
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(updateCmd)
-	updateCmd.Flags().BoolVar(&updateForce, "force", false,
-		"bypass the GPIO1 strap safety gate (allows programming a fresh dongle)")
+	updateCmd.Flags().BoolVar(&updateForce, "force", false, flagUpdateForceHelp)
 }
 
 //nolint:gochecknoglobals // cobra command literal
 var updateCmd = &cobra.Command{
-	Use:   "update <field> <value>",
-	Short: "Read the live EEPROM, change one field, write the result back",
-	Long: `update reads the EEPROM, applies one field change, validates the
-result, and writes it back. This is read-modify-write in a single command.
-
-Field names match the YAML / 'dump --format yaml' keys:
-
-  ` + eeprom.FieldList() + `
-
-Values are entered in human form (decimal integers, plain strings,
-true/false, named enums). Hex is not accepted. Examples:
-
-  openvlm update serial "00001234"
-  openvlm update dac-init-volume -6
-  openvlm update mic-boost true
-  openvlm update boost-mode 22db
-  openvlm update dac-output headset
-
-VID, PID, product-string, and manufacturer-string cannot be changed;
-trying to update them is an error.
-`,
-	Args: cobra.ExactArgs(2),
-	RunE: runUpdate,
+	Use:   useUpdate,
+	Short: shortUpdate,
+	Long:  longUpdate,
+	Args:  cobra.ExactArgs(2),
+	RunE:  runUpdate,
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
@@ -88,7 +69,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return wErr //nolint:wrapcheck // already prefixed
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: updated %s\n", d.Path, field)
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), msgUpdated(displayName(d.SerialNumber, d.Path), field))
 
 	return nil
 }
