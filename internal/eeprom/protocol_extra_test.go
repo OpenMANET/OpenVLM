@@ -140,6 +140,61 @@ func TestWriteImage_VerifyMismatchAddressIsAccurate(t *testing.T) {
 		"VerifyError must point at the lying word, not at any subsequent address")
 }
 
+// TestWipeAll_PatternFFInvalidatesMagic confirms WipeAll with 0xFFFF
+// writes every word to the all-1s pattern and the resulting image is
+// 'unprogrammed' (magic word does not match).
+func TestWipeAll_PatternFFInvalidatesMagic(t *testing.T) {
+	t.Parallel()
+
+	tr := newFakeTransport(t)
+
+	require.NoError(t, eeprom.WipeAll(tr.transport, 0xFFFF))
+
+	got := tr.state.EEPROM()
+	for i, b := range got {
+		require.Equalf(t, byte(0xFF), b, "byte %d after wipe", i)
+	}
+
+	var img eeprom.Image
+	copy(img[:], got[:])
+	assert.False(t, img.IsProgrammed(),
+		"a wiped chip must read as unprogrammed (magic word invalid)")
+}
+
+// TestWipeAll_PatternZeroInvalidatesMagic mirrors the above for 0x0000.
+func TestWipeAll_PatternZeroInvalidatesMagic(t *testing.T) {
+	t.Parallel()
+
+	tr := newFakeTransport(t)
+
+	require.NoError(t, eeprom.WipeAll(tr.transport, 0x0000))
+
+	got := tr.state.EEPROM()
+	for i, b := range got {
+		require.Equalf(t, byte(0x00), b, "byte %d after wipe", i)
+	}
+
+	var img eeprom.Image
+	copy(img[:], got[:])
+	assert.False(t, img.IsProgrammed())
+}
+
+// TestWipeAll_VerifyMismatchSurfaces ensures a flaky read-back during
+// wipe is reported as VerifyError just like a normal write.
+func TestWipeAll_VerifyMismatchSurfaces(t *testing.T) {
+	t.Parallel()
+
+	tr := newFakeTransport(t)
+	wrapper := &readBackLiar{inner: tr.transport, lieAddr: 0x10}
+
+	err := eeprom.WipeAll(wrapper, 0xFFFF)
+	require.Error(t, err)
+
+	var verr *eeprom.VerifyError
+	require.ErrorAs(t, err, &verr)
+	assert.Equal(t, uint8(0x10), verr.Addr)
+}
+
 // TestWriteImage_WritesAllWordsInOrder (Phase B6) instruments the fake to
 // record the address sequence WriteImage emits. Confirms 0..63 in order
 // (no off-by-one, no skip, no duplicate).
@@ -163,6 +218,130 @@ func TestWriteImage_WritesAllWordsInOrder(t *testing.T) {
 			i, got, i)
 	}
 }
+
+// TestReadWord_RetriesTransientSetOutputError confirms a transient
+// SetOutputReport error (the macOS IOKit kIOReturnError class) is absorbed
+// by the protocol-layer retry. The transport fails N-1 times, succeeds on
+// attempt N, and ReadWord returns the expected value.
+func TestReadWord_RetriesTransientSetOutputError(t *testing.T) {
+	t.Parallel()
+
+	tr := newFakeTransport(t)
+	wrapper := &flakySetTransport{
+		inner:        tr.transport,
+		failsRemain:  2, // the 3rd attempt succeeds
+		transientErr: errors.New("simulated kIOReturnError"),
+	}
+
+	tr.state.SetEEPROMWord(0x05, 0xBEEF)
+
+	got, err := eeprom.ReadWord(wrapper, 0x05)
+	require.NoError(t, err, "ReadWord must absorb 2 transient SetOutputReport errors")
+	assert.Equal(t, uint16(0xBEEF), got)
+	assert.Equal(t, 2, wrapper.failedCalls,
+		"both transient failures must have been encountered")
+}
+
+// TestReadWord_FailsAfterRetryBudget proves the retry loop is bounded —
+// a transport that never recovers surfaces the underlying error after
+// the budget is spent.
+func TestReadWord_FailsAfterRetryBudget(t *testing.T) {
+	t.Parallel()
+
+	tr := newFakeTransport(t)
+	persistentErr := errors.New("permanent fault")
+	wrapper := &flakySetTransport{
+		inner:        tr.transport,
+		failsRemain:  100, // far more than transferRetries
+		transientErr: persistentErr,
+	}
+
+	_, err := eeprom.ReadWord(wrapper, 0x05)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, persistentErr),
+		"the underlying error must propagate once retries are exhausted")
+}
+
+// TestWriteAll_RetriesVerifyOnTransientReadFailure simulates the exact
+// failure mode from the user's bug report: the verify-read after
+// WriteWord(0x06) errored once with kIOReturnError. The new retry path
+// must absorb the single transient and let WriteAll complete.
+func TestWriteAll_RetriesVerifyOnTransientReadFailure(t *testing.T) {
+	t.Parallel()
+
+	tr := newFakeTransport(t)
+	wrapper := &flakyVerifyTransport{
+		inner:       tr.transport,
+		flakyAddr:   0x06,
+		failsRemain: 1, // matches the user's "once" report
+		err:         errors.New("simulated kIOReturnError"),
+	}
+
+	var tail [eeprom.WordCount - 0x33]uint16
+	img := eeprom.OpenVLMDefaults.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
+
+	require.NoError(t, eeprom.WriteImage(wrapper, img),
+		"WriteImage must absorb one transient verify-read failure")
+	assert.Equal(t, 1, wrapper.failedCalls,
+		"the injected failure must have actually fired once")
+}
+
+// flakySetTransport wraps a real transport and fails the first
+// `failsRemain` SetOutputReport calls before passing through.
+type flakySetTransport struct {
+	inner        hidx.Transport
+	transientErr error
+	failsRemain  int
+	failedCalls  int
+}
+
+func (f *flakySetTransport) SetOutputReport(reportID byte, buf []byte) (int, error) {
+	if f.failsRemain > 0 {
+		f.failsRemain--
+		f.failedCalls++
+
+		return 0, f.transientErr
+	}
+
+	return f.inner.SetOutputReport(reportID, buf)
+}
+
+func (f *flakySetTransport) GetInputReport(reportID byte, buf []byte) (int, error) {
+	return f.inner.GetInputReport(reportID, buf)
+}
+func (f *flakySetTransport) Close() error { return f.inner.Close() }
+
+// flakyVerifyTransport fails GetInputReport on a specific addr the first
+// `failsRemain` times the host sends a read for that addr. Used to
+// simulate the user-reported macOS IOKit blip on a single verify-read.
+type flakyVerifyTransport struct {
+	inner       hidx.Transport
+	err         error
+	lastAddr    uint8
+	flakyAddr   uint8
+	failsRemain int
+	failedCalls int
+}
+
+func (f *flakyVerifyTransport) SetOutputReport(reportID byte, buf []byte) (int, error) {
+	if len(buf) >= 5 {
+		f.lastAddr = buf[4] & 0x3F
+	}
+
+	return f.inner.SetOutputReport(reportID, buf)
+}
+
+func (f *flakyVerifyTransport) GetInputReport(reportID byte, buf []byte) (int, error) {
+	if f.lastAddr == f.flakyAddr && f.failsRemain > 0 {
+		f.failsRemain--
+		f.failedCalls++
+
+		return 0, f.err
+	}
+
+	return f.inner.GetInputReport(reportID, buf)
+}
+func (f *flakyVerifyTransport) Close() error { return f.inner.Close() }
 
 // ─── test doubles ───────────────────────────────────────────────────────
 
