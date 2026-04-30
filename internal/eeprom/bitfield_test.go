@@ -74,6 +74,7 @@ func TestRoundTrip_EveryNumericFieldAtBoundaries(t *testing.T) {
 					"validator must accept %s=%d", tc.name, value)
 
 				var tail [eeprom.WordCount - 0x33]uint16
+
 				img := v.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 
 				decoded, _, err := img.Decode()
@@ -95,6 +96,7 @@ func TestEncode_ReservedBitsAreZero(t *testing.T) {
 	t.Parallel()
 
 	var tail [eeprom.WordCount - 0x33]uint16
+
 	img := eeprom.OpenVLMDefaults.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 
 	// Word 0x00: reserved-must-be-1 bits at positions 0 and 2.
@@ -139,6 +141,7 @@ func TestEncode_StringBoundaries(t *testing.T) {
 		require.NoError(t, v.Validate())
 
 		var tail [eeprom.WordCount - 0x33]uint16
+
 		img := v.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 		assert.Equal(t, uint16(0), img.Word(0x0A),
 			"empty product string must zero word 0x0A")
@@ -152,6 +155,7 @@ func TestEncode_StringBoundaries(t *testing.T) {
 		require.NoError(t, v.Validate())
 
 		var tail [eeprom.WordCount - 0x33]uint16
+
 		img := v.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 		assert.Equal(t, byte(0x3E), img[0x14],
 			"30-char string header low byte must equal 0x3E per datasheet §7.1.3 hint")
@@ -236,6 +240,7 @@ func itoa(n int) string {
 	}
 
 	var buf [12]byte
+
 	i := len(buf)
 
 	for n > 0 {

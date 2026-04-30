@@ -129,6 +129,7 @@ func TestWriteImage_VerifyMismatchAddressIsAccurate(t *testing.T) {
 	wrapper := &readBackLiar{inner: tr.transport, lieAddr: flipAddr}
 
 	var tail [eeprom.WordCount - 0x33]uint16
+
 	img := eeprom.OpenVLMDefaults.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 
 	err := eeprom.WriteImage(wrapper, img)
@@ -205,6 +206,7 @@ func TestWriteImage_WritesAllWordsInOrder(t *testing.T) {
 	tracker := &orderTracker{inner: tr.transport}
 
 	var tail [eeprom.WordCount - 0x33]uint16
+
 	img := eeprom.OpenVLMDefaults.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 
 	require.NoError(t, eeprom.WriteImage(tracker, img))
@@ -278,6 +280,7 @@ func TestWriteAll_RetriesVerifyOnTransientReadFailure(t *testing.T) {
 	}
 
 	var tail [eeprom.WordCount - 0x33]uint16
+
 	img := eeprom.OpenVLMDefaults.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 
 	require.NoError(t, eeprom.WriteImage(wrapper, img),
@@ -303,11 +306,11 @@ func (f *flakySetTransport) SetOutputReport(reportID byte, buf []byte) (int, err
 		return 0, f.transientErr
 	}
 
-	return f.inner.SetOutputReport(reportID, buf)
+	return f.inner.SetOutputReport(reportID, buf) //nolint:wrapcheck // pass-through to wrapped transport
 }
 
 func (f *flakySetTransport) GetInputReport(reportID byte, buf []byte) (int, error) {
-	return f.inner.GetInputReport(reportID, buf)
+	return f.inner.GetInputReport(reportID, buf) //nolint:wrapcheck // pass-through to wrapped transport
 }
 func (f *flakySetTransport) Close() error { return f.inner.Close() }
 
@@ -328,7 +331,7 @@ func (f *flakyVerifyTransport) SetOutputReport(reportID byte, buf []byte) (int, 
 		f.lastAddr = buf[4] & 0x3F
 	}
 
-	return f.inner.SetOutputReport(reportID, buf)
+	return f.inner.SetOutputReport(reportID, buf) //nolint:wrapcheck // pass-through to wrapped transport
 }
 
 func (f *flakyVerifyTransport) GetInputReport(reportID byte, buf []byte) (int, error) {
@@ -339,7 +342,7 @@ func (f *flakyVerifyTransport) GetInputReport(reportID byte, buf []byte) (int, e
 		return 0, f.err
 	}
 
-	return f.inner.GetInputReport(reportID, buf)
+	return f.inner.GetInputReport(reportID, buf) //nolint:wrapcheck // pass-through to wrapped transport
 }
 func (f *flakyVerifyTransport) Close() error { return f.inner.Close() }
 
@@ -353,16 +356,19 @@ type countingTransport struct {
 
 func (c *countingTransport) SetOutputReport(_ byte, _ []byte) (int, error) {
 	c.setCount++
+
 	return 5, nil
 }
 
 func (c *countingTransport) GetInputReport(_ byte, buf []byte) (int, error) {
 	c.getCount++
+
 	if len(buf) >= 5 {
 		// Always return EEPROM-mode echo so the protocol code does not
 		// short-circuit on missing-echo before we count the call.
 		buf[1] = 0x80
 	}
+
 	return 5, nil
 }
 func (c *countingTransport) Close() error { return nil }
@@ -398,6 +404,7 @@ func (i *injectErrTransport) SetOutputReport(_ byte, _ []byte) (int, error) {
 	if i.setErr != nil {
 		return 0, i.setErr
 	}
+
 	return 5, nil
 }
 
@@ -405,9 +412,11 @@ func (i *injectErrTransport) GetInputReport(_ byte, buf []byte) (int, error) {
 	if i.getErr != nil {
 		return 0, i.getErr
 	}
+
 	if len(buf) >= 5 {
 		buf[1] = 0x80
 	}
+
 	return 5, nil
 }
 func (i *injectErrTransport) Close() error { return nil }
@@ -427,18 +436,20 @@ func (l *readBackLiar) SetOutputReport(reportID byte, buf []byte) (int, error) {
 		l.lastAddr = buf[4] & 0x3F
 	}
 
-	return l.inner.SetOutputReport(reportID, buf)
+	return l.inner.SetOutputReport(reportID, buf) //nolint:wrapcheck // pass-through to wrapped transport
 }
 
 func (l *readBackLiar) GetInputReport(reportID byte, buf []byte) (int, error) {
 	n, err := l.inner.GetInputReport(reportID, buf)
 	if err != nil {
-		return n, err
+		return n, err //nolint:wrapcheck // pass-through to wrapped transport
 	}
+
 	if l.lastAddr == l.lieAddr && len(buf) >= 5 {
 		buf[2] ^= 0xFF
 		buf[3] ^= 0xFF
 	}
+
 	return n, nil
 }
 func (l *readBackLiar) Close() error { return l.inner.Close() }
@@ -459,11 +470,12 @@ func (o *orderTracker) SetOutputReport(reportID byte, buf []byte) (int, error) {
 			o.writeAddrs = append(o.writeAddrs, or3&0x3F)
 		}
 	}
-	return o.inner.SetOutputReport(reportID, buf)
+
+	return o.inner.SetOutputReport(reportID, buf) //nolint:wrapcheck // pass-through to wrapped transport
 }
 
 func (o *orderTracker) GetInputReport(reportID byte, buf []byte) (int, error) {
-	return o.inner.GetInputReport(reportID, buf)
+	return o.inner.GetInputReport(reportID, buf) //nolint:wrapcheck // pass-through to wrapped transport
 }
 func (o *orderTracker) Close() error { return o.inner.Close() }
 
@@ -479,6 +491,7 @@ func newFakeTransport(t *testing.T) *fakeTransport {
 	t.Helper()
 
 	var tail [eeprom.WordCount - 0x33]uint16
+
 	img := eeprom.OpenVLMDefaults.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
 
 	var initial [64]uint16

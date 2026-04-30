@@ -105,6 +105,7 @@ func TestApplyUpdate_EveryField(t *testing.T) {
 
 	for _, f := range eeprom.AllFields() {
 		f := f
+
 		v, ok := values[f]
 		if !ok {
 			t.Fatalf("test fixture missing a value for %q — keep this map in sync with AllFields()", f)
@@ -112,6 +113,7 @@ func TestApplyUpdate_EveryField(t *testing.T) {
 
 		t.Run(string(f), func(t *testing.T) {
 			t.Parallel()
+
 			_, err := eeprom.ApplyUpdate(eeprom.OpenVLMDefaults, string(f), v)
 			require.NoErrorf(t, err, "ApplyUpdate(%q, %q) must succeed", f, v)
 		})
@@ -128,6 +130,7 @@ func TestApplyUpdate_BoolParserAcceptsAllForms(t *testing.T) {
 		value := value
 		t.Run("accept_"+value, func(t *testing.T) {
 			t.Parallel()
+
 			v, err := eeprom.ApplyUpdate(eeprom.OpenVLMDefaults, "mic-boost", value)
 			require.NoError(t, err)
 			assert.True(t, v.MicBoost)
@@ -138,6 +141,7 @@ func TestApplyUpdate_BoolParserAcceptsAllForms(t *testing.T) {
 		value := value
 		t.Run("reject_to_false_"+value, func(t *testing.T) {
 			t.Parallel()
+
 			v, err := eeprom.ApplyUpdate(eeprom.OpenVLMDefaults, "mic-boost", value)
 			require.NoError(t, err)
 			assert.False(t, v.MicBoost)

@@ -144,5 +144,6 @@ func (e *errBackend) Open(path string) (hidx.Transport, error) {
 	if path == e.failPath {
 		return nil, e.failErr
 	}
+
 	return e.inner.Open(path) //nolint:wrapcheck // pass-through
 }
