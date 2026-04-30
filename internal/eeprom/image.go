@@ -80,14 +80,14 @@ func (i *Image) Decode() (View, []string, error) {
 	v.ManufacturerString = decodeString(i, addrMfrHeader, addrMfrBody, maxMfrBytes)
 
 	w2A := i.Word(addrVolumeInit)
-	v.DACInitVolume = signExtend(int(w2A>>dacInitShift)&((1<<dacInitWidth)-1), dacInitWidth)
-	v.ADCInitVolume = signExtend(int(w2A>>adcInitShift)&((1<<adcInitWidth)-1), adcInitWidth)
+	v.DACInitVolume = decodeAttenuation(int(w2A>>dacInitShift)&((1<<dacInitWidth)-1), dacInitMaxDB)
+	v.ADCInitVolume = decodeAttenuation(int(w2A>>adcInitShift)&((1<<adcInitWidth)-1), adcInitMaxDB)
 	v.DACMaxMinVolumeValid = w2A&dacMaxMinValid != 0
 	v.ADCMaxMinVolumeValid = w2A&adcMaxMinValid != 0
 	v.AAMaxMinVolumeValid = w2A&aaMaxMinValid != 0
 
 	w2B := i.Word(addrAnalogConfig)
-	v.AAInitVolume = signExtend(int(w2B>>aaInitShift)&((1<<aaInitWidth)-1), aaInitWidth)
+	v.AAInitVolume = decodeAttenuation(int(w2B>>aaInitShift)&((1<<aaInitWidth)-1), aaInitMaxDB)
 
 	if w2B&bitBoostMode12dB != 0 {
 		v.BoostMode = Boost12dB
@@ -161,8 +161,8 @@ func (v *View) Encode(vendorID, productID uint16, tail [WordCount - 0x33]uint16)
 	encodeString(&img, addrMfrHeader, addrMfrBody, v.ManufacturerString, maxMfrBytes)
 
 	w2A := uint16(0)
-	w2A |= encodeSigned(v.DACInitVolume, dacInitWidth) << dacInitShift
-	w2A |= encodeSigned(v.ADCInitVolume, adcInitWidth) << adcInitShift
+	w2A |= encodeAttenuation(v.DACInitVolume, dacInitMaxDB, dacInitWidth) << dacInitShift
+	w2A |= encodeAttenuation(v.ADCInitVolume, adcInitMaxDB, adcInitWidth) << adcInitShift
 
 	if v.DACMaxMinVolumeValid {
 		w2A |= dacMaxMinValid
@@ -179,7 +179,7 @@ func (v *View) Encode(vendorID, productID uint16, tail [WordCount - 0x33]uint16)
 	img.SetWord(addrVolumeInit, w2A)
 
 	w2B := uint16(0)
-	w2B |= encodeSigned(v.AAInitVolume, aaInitWidth) << aaInitShift
+	w2B |= encodeAttenuation(v.AAInitVolume, aaInitMaxDB, aaInitWidth) << aaInitShift
 
 	if v.BoostMode == Boost12dB {
 		w2B |= bitBoostMode12dB
@@ -236,29 +236,23 @@ func (v *View) Encode(vendorID, productID uint16, tail [WordCount - 0x33]uint16)
 	return img
 }
 
-// signExtend interprets value as a `width`-bit two's complement number and
-// returns its sign-extended int.
-func signExtend(value, width int) int {
-	signBit := 1 << (width - 1)
-	if value&signBit == 0 {
-		return value
-	}
-
-	return value - (1 << width)
-}
-
-// encodeSigned packs a signed int into a `width`-bit two's complement field.
+// encodeAttenuation packs a dB value into a width-bit unsigned field where
+// bits = maxDB - value (CM108B convention: bits 0 = loudest, bits N = N dB
+// below max). Used for DAC, ADC, and AA init-volume fields. Bench-confirmed
+// 2026-04-30.
 //
-// CALLER CONTRACT: value must already be in the field's representable range
-// (-(1<<(width-1)) .. (1<<(width-1))-1). Out-of-range values are silently
-// masked, producing whatever bit pattern the low `width` bits happen to be —
-// validate first. The init-volume validator in validate.go is the single
-// upstream gate; widening any of dac/adc/aaInitMin/Max past the bit-field
-// range will reintroduce silent corruption. See plan Phase G.
-func encodeSigned(value, width int) uint16 {
+// CALLER CONTRACT: value must already be in [maxDB - ((1<<width) - 1), maxDB].
+// The validator in validate.go is the single upstream gate; encoder and
+// validator must move together — see CLAUDE.md "memory bug class to watch
+// for".
+func encodeAttenuation(value, maxDB, width int) uint16 {
 	mask := uint16((1 << width) - 1)
 
-	return uint16(value) & mask
+	return uint16(maxDB-value) & mask
+}
+
+func decodeAttenuation(bits, maxDB int) int {
+	return maxDB - bits
 }
 
 // decodeDBHighByte reads the datasheet's "high byte = signed dB, low byte =

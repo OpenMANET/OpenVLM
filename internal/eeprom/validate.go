@@ -48,26 +48,17 @@ const (
 // (DACMinVolume etc.) are entered in dB and encoded into the high byte of
 // a 16-bit word, so their hard ceiling is the int8 range.
 //
-// Init-volume ranges are the intersection of (a) the dB range the datasheet
-// documents in §7.1.3 / §8.3 and (b) what the current two's-complement
-// encoder in image.go can faithfully represent given the bit-field width.
-// Until a hardware bench gate confirms whether the chip uses two's
-// complement or offset-binary for these fields (see plan Phase G), the
-// validator refuses any input the encoder would silently corrupt.
-//
-//   - DAC init: 7-bit signed → -64..63; datasheet doc range -37..0 is
-//     the intersection.
-//   - ADC init: 6-bit signed → -32..31; datasheet doc range -12..+23 is
-//     the intersection.
-//   - AA  init: 5-bit signed → -16..15; datasheet doc range is -23..+8.
-//     Intersection is -16..8 (loses access to -17..-23 until the
-//     encoding is locked).
+// Init-volume fields are attenuation-encoded (bits = maxDB - value, bits 0
+// = loudest), bench-confirmed 2026-04-30. Two's complement silenced the
+// DAC; plain offset-binary inverted the direction. Maximum-dB constants
+// live in layout.go as dac/adc/aaInitMaxDB. Encoder and validator must
+// move together — see CLAUDE.md "memory bug class to watch for".
 const (
-	dacInitMin = -37
+	dacInitMin = -37 // datasheet §8.3: -37..0 dB, 38 steps in 7-bit field
 	dacInitMax = 0
-	adcInitMin = -12
+	adcInitMin = -12 // datasheet §8.3: -12..+23 dB, 36 steps in 6-bit field
 	adcInitMax = 23
-	aaInitMin  = -16
+	aaInitMin  = -23 // datasheet §8.3: -23..+8 dB, 32 steps in 5-bit field
 	aaInitMax  = 8
 
 	minMaxFloor = -128

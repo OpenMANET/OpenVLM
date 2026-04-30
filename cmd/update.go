@@ -14,6 +14,11 @@ var updateForce bool
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.Flags().BoolVar(&updateForce, "force", false, flagUpdateForceHelp)
+	// Stop pflag scanning for flags once the first positional arg appears so
+	// negative numbers like "-10" reach RunE verbatim instead of being
+	// rejected as unknown shorthand flags. Side effect: --force must precede
+	// the positional args (e.g. `update --force dac-init-volume -10`).
+	updateCmd.Flags().SetInterspersed(false)
 }
 
 //nolint:gochecknoglobals // cobra command literal

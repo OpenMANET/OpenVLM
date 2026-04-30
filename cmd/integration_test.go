@@ -100,6 +100,26 @@ func TestUpdate_EndToEnd(t *testing.T) {
 	assert.Equal(t, "Updated01", view.Serial)
 }
 
+// TestUpdate_AcceptsNegativeValue verifies that signed-int fields like
+// dac-init-volume can be set to negative numbers without the `--` separator.
+// pflag's default behavior treats `-10` as an unknown shorthand flag; the
+// SetInterspersed(false) in updateCmd's init() makes pflag stop scanning for
+// flags once the first positional arg appears.
+func TestUpdate_AcceptsNegativeValue(t *testing.T) {
+	state := withFakeBackend(t)
+
+	resetOverrides()
+
+	rootCmd.SetArgs([]string{"update", "dac-init-volume", "-10"})
+	require.NoError(t, rootCmd.Execute())
+
+	got := state.EEPROM()
+	view, _, err := decodeBytes(got)
+	require.NoError(t, err)
+	assert.Equal(t, -10, view.DACInitVolume,
+		"negative positional value must reach the field without -- separator")
+}
+
 // TestUpdate_RejectsProductString mirrors the protocol-level write-lock at
 // the CLI surface for the product-string field. `openvlm update
 // product-string ...` must never write anything.

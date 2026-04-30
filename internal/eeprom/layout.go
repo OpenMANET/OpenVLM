@@ -62,11 +62,21 @@ const (
 )
 
 // Word 0x2A bit ranges.
+//
+// Init-volume fields are encoded as attenuation steps from maxDB
+// (bits = maxDB - value). Bench-confirmed 2026-04-30: bits 0 = loudest,
+// bits N = N dB below max. Two's complement was the original guess and
+// silenced the DAC; offset-binary (bits = value - minDB) was the second
+// guess and produced very soft audio because direction was wrong. Encoder
+// and validator must move together — see CLAUDE.md "memory bug class to
+// watch for".
 const (
 	dacInitShift   = 9
 	dacInitWidth   = 7
+	dacInitMaxDB   = 0 // bits 0 = 0 dB (loudest), bits 37 = -37 dB
 	adcInitShift   = 3
 	adcInitWidth   = 6
+	adcInitMaxDB   = 23 // bits 0 = +23 dB, bits 35 = -12 dB
 	dacMaxMinValid = 1 << 2
 	adcMaxMinValid = 1 << 1
 	aaMaxMinValid  = 1 << 0
@@ -76,6 +86,7 @@ const (
 const (
 	aaInitShift          = 11
 	aaInitWidth          = 5
+	aaInitMaxDB          = 8      // bits 0 = +8 dB, bits 31 = -23 dB
 	bitBoostMode12dB     = 1 << 9 // 1 = 12dB, 0 = 22dB (datasheet table)
 	bitDACShutdown       = 1 << 8
 	bitTotalPowerControl = 1 << 7

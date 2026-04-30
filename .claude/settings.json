@@ -33,7 +33,8 @@
       "Bash(xargs -I {} basename {})",
       "Bash(gh repo *)",
       "WebFetch(domain:github.com)",
-      "Bash(go version *)"
+      "Bash(go version *)",
+      "Bash(./bin/openvlm list *)"
     ],
     "additionalDirectories": [
       "/workspaces/openvlm/.claude/skills"

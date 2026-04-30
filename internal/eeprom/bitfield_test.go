@@ -14,10 +14,10 @@ import (
 // encoder agreement test. For every documented numeric field it visits the
 // range boundaries that the validator promises to accept, encodes the View,
 // decodes the resulting Image, and asserts the decoded value matches the
-// input. A pre-fix run of this test failed on aa-init-volume = -23 because
-// the 5-bit two's-complement encoder silently masked it to +9. With the
-// validator narrowed to the encoder's faithful range, every accepted input
-// must round-trip.
+// input. The init-volume encoder is now attenuation-style (bits 0 =
+// loudest, bench-confirmed 2026-04-30; two's complement silenced the DAC,
+// plain offset-binary inverted the direction), so the full datasheet
+// ranges round-trip including aa-init-volume = -23.
 func TestRoundTrip_EveryNumericFieldAtBoundaries(t *testing.T) {
 	t.Parallel()
 
@@ -43,7 +43,7 @@ func TestRoundTrip_EveryNumericFieldAtBoundaries(t *testing.T) {
 			name:   "aa-init-volume",
 			set:    func(v *eeprom.View, n int) { v.AAInitVolume = n },
 			get:    func(v eeprom.View) int { return v.AAInitVolume },
-			values: []int{-16, -15, 0, 7, 8},
+			values: []int{-23, -22, -16, -7, 0, 7, 8},
 		},
 		{
 			name:   "dac-min-volume",
@@ -123,6 +123,54 @@ func TestEncode_ReservedBitsAreZero(t *testing.T) {
 		w := img.Word(addr)
 		assert.Equal(t, uint16(0), w&0xFF,
 			"word 0x%02X low byte must be 0 (datasheet pattern '0xXX00')", addr)
+	}
+}
+
+// TestEncode_InitVolumeBitPatterns pins the exact bit placement for DAC,
+// ADC, and AA init-volume fields. The chip uses attenuation encoding
+// (bits = maxDB - value, bits 0 = loudest), bench-confirmed 2026-04-30:
+// two's-complement silenced the DAC, plain offset-binary produced very
+// soft audio because direction was inverted. Round-trip tests alone are
+// tautological (encoder + decoder agree on the same wrong convention);
+// these assertions are the load-bearing gate that pins the convention.
+func TestEncode_InitVolumeBitPatterns(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		set       func(*eeprom.View)
+		wordAddr  uint8
+		shift     uint
+		widthMask uint16
+		wantBits  uint16
+	}{
+		{"dac-init 0 dB → 0 (loudest)", func(v *eeprom.View) { v.DACInitVolume = 0 }, 0x2A, 9, 0x7F, 0},
+		{"dac-init -10 dB → 10", func(v *eeprom.View) { v.DACInitVolume = -10 }, 0x2A, 9, 0x7F, 10},
+		{"dac-init -37 dB → 37 (quietest)", func(v *eeprom.View) { v.DACInitVolume = -37 }, 0x2A, 9, 0x7F, 37},
+		{"adc-init +23 dB → 0 (loudest)", func(v *eeprom.View) { v.ADCInitVolume = 23 }, 0x2A, 3, 0x3F, 0},
+		{"adc-init +8 dB → 15", func(v *eeprom.View) { v.ADCInitVolume = 8 }, 0x2A, 3, 0x3F, 15},
+		{"adc-init -12 dB → 35 (quietest)", func(v *eeprom.View) { v.ADCInitVolume = -12 }, 0x2A, 3, 0x3F, 35},
+		{"aa-init +8 dB → 0 (loudest)", func(v *eeprom.View) { v.AAInitVolume = 8 }, 0x2B, 11, 0x1F, 0},
+		{"aa-init -7 dB → 15", func(v *eeprom.View) { v.AAInitVolume = -7 }, 0x2B, 11, 0x1F, 15},
+		{"aa-init -23 dB → 31 (quietest)", func(v *eeprom.View) { v.AAInitVolume = -23 }, 0x2B, 11, 0x1F, 31},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			v := eeprom.OpenVLMDefaults
+			tc.set(&v)
+			require.NoError(t, v.Validate())
+
+			var tail [eeprom.WordCount - 0x33]uint16
+
+			img := v.Encode(cm108.OpenVLMVendorID, cm108.OpenVLMProductID, tail)
+			got := (img.Word(tc.wordAddr) >> tc.shift) & tc.widthMask
+			assert.Equal(t, tc.wantBits, got)
+		})
 	}
 }
 
