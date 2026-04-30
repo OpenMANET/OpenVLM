@@ -15,24 +15,24 @@ var dumpFormat string
 
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(dumpCmd)
-	dumpCmd.Flags().StringVar(&dumpFormat, "format", "text",
-		"output format: text|yaml|hex")
+	dumpCmd.Flags().StringVar(&dumpFormat, "format", "yaml",
+		"output format: yaml|text|hex")
 }
 
 //nolint:gochecknoglobals // cobra command literal
 var dumpCmd = &cobra.Command{
 	Use:   "dump",
-	Short: "Decode the live EEPROM as text, YAML, or hex",
+	Short: "Decode the live EEPROM as YAML, text, or hex",
 	Long: `dump reads the EEPROM and decodes it into a human-readable form.
 
 Formats:
-  text  human table grouped by datasheet section (default)
-  yaml  full PartialView round-trip; pipe into 'openvlm write -i -' to reapply
+  yaml  PartialView round-trip (default); pipe into 'openvlm provision --overrides -' to reapply
+  text  human table grouped by datasheet section, including write-locked strings
   hex   raw 128-byte hex dump for diagnostics
 
 Examples:
   openvlm dump
-  openvlm dump --format yaml > config.yaml
+  openvlm dump --format text
   openvlm dump --format hex
 `,
 	RunE: runDump,
@@ -52,14 +52,14 @@ func runDump(cmd *cobra.Command, _ []string) error {
 	}
 
 	switch strings.ToLower(dumpFormat) {
-	case "text", "":
-		return printDumpText(cmd, d, &img)
-	case "yaml":
+	case "yaml", "":
 		return printDumpYAML(cmd, &img)
+	case "text":
+		return printDumpText(cmd, d, &img)
 	case "hex":
 		return printDumpHex(cmd, &img)
 	default:
-		return &usageError{err: fmt.Errorf("unknown --format %q (use text, yaml, or hex)", dumpFormat)}
+		return &usageError{err: fmt.Errorf("unknown --format %q (use yaml, text, or hex)", dumpFormat)}
 	}
 }
 

@@ -22,8 +22,9 @@ func (v *View) MarshalYAML() ([]byte, error) {
 }
 
 // UnmarshalPartial parses YAML bytes into a PartialView. It rejects any
-// `vid:` or `pid:` key (those fields are write-locked, see the plan) and
-// any key not present on PartialView (so a typo doesn't silently disappear).
+// write-locked key (`vid`, `pid`, `product-string`, `manufacturer-string`)
+// and any key not present on PartialView (so a typo doesn't silently
+// disappear).
 func UnmarshalPartial(data []byte) (*PartialView, error) {
 	if err := rejectLockedKeys(data); err != nil {
 		return nil, err
@@ -47,10 +48,11 @@ func UnmarshalPartial(data []byte) (*PartialView, error) {
 }
 
 // rejectLockedKeys scans the top-level YAML keys and returns an error if
-// `vid` or `pid` appears. Doing this at the structural level (rather than
-// via `KnownFields(true)`) gives the user a fixed, recognizable message
-// about the write-lock policy instead of a generic "field not found"
-// surprise.
+// any write-locked field (`vid`, `pid`, `product-string`,
+// `manufacturer-string`) appears. Doing this at the structural level
+// (rather than via `KnownFields(true)`) gives the user a fixed,
+// recognizable message about the write-lock policy instead of a generic
+// "field not found" surprise.
 func rejectLockedKeys(data []byte) error {
 	var n yaml.Node
 
@@ -74,6 +76,9 @@ func rejectLockedKeys(data []byte) error {
 		case "vid", "pid":
 			return fmt.Errorf("eeprom: %q is not user-programmable in this tool "+
 				"(VID/PID are sourced from compiled-in OpenVLM constants)", key)
+		case "product-string", "manufacturer-string":
+			return fmt.Errorf("eeprom: %q is not user-programmable in this tool "+
+				"(product/manufacturer strings are sourced from compiled-in OpenVLM defaults)", key)
 		}
 	}
 

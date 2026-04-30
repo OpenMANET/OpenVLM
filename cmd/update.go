@@ -31,13 +31,14 @@ Field names match the YAML / 'dump --format yaml' keys:
 Values are entered in human form (decimal integers, plain strings,
 true/false, named enums). Hex is not accepted. Examples:
 
-  openvlm update product-string "OpenVLM v1"
+  openvlm update serial "00001234"
   openvlm update dac-init-volume -6
   openvlm update mic-boost true
   openvlm update boost-mode 22db
   openvlm update dac-output headset
 
-VID and PID cannot be changed; trying to update them is an error.
+VID, PID, product-string, and manufacturer-string cannot be changed;
+trying to update them is an error.
 `,
 	Args: cobra.ExactArgs(2),
 	RunE: runUpdate,

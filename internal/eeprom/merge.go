@@ -26,14 +26,6 @@ func ApplyOverrides(base View, o *PartialView) View {
 		base.Serial = *o.Serial
 	}
 
-	if o.ProductString != nil {
-		base.ProductString = *o.ProductString
-	}
-
-	if o.ManufacturerString != nil {
-		base.ManufacturerString = *o.ManufacturerString
-	}
-
 	if o.DACInitVolume != nil {
 		base.DACInitVolume = *o.DACInitVolume
 	}

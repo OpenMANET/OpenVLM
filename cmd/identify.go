@@ -40,14 +40,14 @@ func runIdentify(cmd *cobra.Command, _ []string) error {
 	}
 
 	if !d.IsOpenVLM {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: NOT confirmed (GPIO1 low)\n", d.Path)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: NOT confirmed\n", d.Path)
 
 		return &notIdentifiedError{
 			err: fmt.Errorf("%s: GPIO1 strap low", d.Path),
 		}
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: confirmed OpenVLM (GPIO1 high)\n", d.Path)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: confirmed OpenVLM\n", d.Path)
 
 	return nil
 }

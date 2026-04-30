@@ -70,3 +70,4 @@
 .golangci.yml @coreywagehoft
 .goreleaser.yml @coreywagehoft
 .claude @coreywagehoft
+CLAUDE.md @coreywagehoft

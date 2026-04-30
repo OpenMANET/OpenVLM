@@ -31,19 +31,20 @@ func TestApplyUpdate_RejectsHexInput(t *testing.T) {
 	}
 }
 
-// TestApplyUpdate_VIDPIDLocked enforces the documented refusal to update
-// VID or PID via the `update` verb. A user typing
-// `openvlm update vid 0x1234` must get a fixed, recognizable error.
-func TestApplyUpdate_VIDPIDLocked(t *testing.T) {
+// TestApplyUpdate_LockedFields enforces the documented refusal to update
+// VID, PID, product-string, or manufacturer-string via the `update` verb.
+// A user typing `openvlm update vid 0x1234` (or `update product-string foo`)
+// must get a fixed, recognizable error.
+func TestApplyUpdate_LockedFields(t *testing.T) {
 	t.Parallel()
 
-	for _, field := range []string{"vid", "pid"} {
+	for _, field := range []string{"vid", "pid", "product-string", "manufacturer-string"} {
 		field := field
 
 		t.Run(field, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := eeprom.ApplyUpdate(eeprom.OpenVLMDefaults, field, "1234")
+			_, err := eeprom.ApplyUpdate(eeprom.OpenVLMDefaults, field, "anything")
 			require.Error(t, err)
 			assert.True(t, errors.Is(err, eeprom.ErrFieldLocked),
 				"want ErrFieldLocked, got %v", err)
@@ -71,9 +72,9 @@ func TestApplyUpdate_KnownFields_Accept(t *testing.T) {
 		field, value string
 		check        func(*testing.T, eeprom.View)
 	}{
-		{"product-string", "OpenVLM v1", func(t *testing.T, v eeprom.View) {
+		{"serial", "00001234", func(t *testing.T, v eeprom.View) {
 			t.Helper()
-			assert.Equal(t, "OpenVLM v1", v.ProductString)
+			assert.Equal(t, "00001234", v.Serial)
 		}},
 		{"dac-init-volume", "-6", func(t *testing.T, v eeprom.View) {
 			t.Helper()

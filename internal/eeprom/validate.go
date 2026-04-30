@@ -163,8 +163,6 @@ func AllFields() []Field {
 		FieldExtendedFieldsValid,
 		FieldSerialEnable,
 		FieldSerial,
-		FieldProductString,
-		FieldManufacturerString,
 		FieldDACInitVolume,
 		FieldADCInitVolume,
 		FieldDACMaxMinVolumeValid,

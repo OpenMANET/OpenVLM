@@ -170,10 +170,6 @@ func registerOverrideFlags(cmd *cobra.Command) {
 		fs.Var(newStringPtr(target), name, help)
 	}
 
-	addString("product-string", &partialOverrides.ProductString,
-		"USB product string (≤30 printable ASCII chars)")
-	addString("manufacturer-string", &partialOverrides.ManufacturerString,
-		"USB manufacturer string (≤30 printable ASCII chars)")
 	addString("serial", &partialOverrides.Serial,
 		"USB serial number string (≤12 printable ASCII chars)")
 

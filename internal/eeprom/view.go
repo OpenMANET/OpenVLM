@@ -33,12 +33,18 @@ const (
 // VID and PID are intentionally absent — they are write-locked and sourced
 // from cm108.OpenVLMVendorID/ProductID at encode time. Read-side display
 // of the device's current VID/PID lives on Image, not on View.
+//
+// ProductString and ManufacturerString are kept on the struct so the decoder
+// can populate them for `openvlm dump --format text`, but they are tagged
+// `yaml:"-"` because they are write-locked: a YAML dump must round-trip
+// through `provision --overrides` without re-introducing fields that
+// `UnmarshalPartial` will reject.
 type View struct {
 	DACOutput            DACOutput `yaml:"dac-output"`
 	BoostMode            BoostMode `yaml:"boost-mode"`
 	Serial               string    `yaml:"serial"`
-	ProductString        string    `yaml:"product-string"`
-	ManufacturerString   string    `yaml:"manufacturer-string"`
+	ProductString        string    `yaml:"-"`
+	ManufacturerString   string    `yaml:"-"`
 	ADCInitVolume        int       `yaml:"adc-init-volume"`
 	DACInitVolume        int       `yaml:"dac-init-volume"`
 	AAMinVolume          int       `yaml:"aa-min-volume"`
@@ -67,16 +73,15 @@ type View struct {
 // field. Both YAML decoding (omitted keys → nil) and CLI flag handling
 // (unset flag → nil) use this representation.
 //
-// Like View, PartialView has no VID or PID field and no reserved-bit
-// fields. Attempts to set them via YAML or flag are rejected at decode /
-// flag-registration time.
+// PartialView intentionally omits the write-locked fields (VID, PID,
+// product-string, manufacturer-string). Attempts to set them via YAML or
+// flag are rejected at decode / flag-registration time so the chip always
+// receives the compiled-in defaults for those identity fields.
 type PartialView struct {
 	ExtendedFieldsValid *bool `yaml:"extended-fields-valid,omitempty"`
 	SerialEnable        *bool `yaml:"serial-enable,omitempty"`
 
-	Serial             *string `yaml:"serial,omitempty"`
-	ProductString      *string `yaml:"product-string,omitempty"`
-	ManufacturerString *string `yaml:"manufacturer-string,omitempty"`
+	Serial *string `yaml:"serial,omitempty"`
 
 	DACInitVolume        *int  `yaml:"dac-init-volume,omitempty"`
 	ADCInitVolume        *int  `yaml:"adc-init-volume,omitempty"`

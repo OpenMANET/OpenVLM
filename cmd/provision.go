@@ -43,15 +43,15 @@ over YAML, YAML wins over compiled defaults):
 
 Examples:
   openvlm provision
-  openvlm provision --product-string "OpenVLM v1"
+  openvlm provision --serial "00001234"
   openvlm provision --overrides factory.yaml
   openvlm provision --overrides factory.yaml --dac-init-volume -6
   openvlm provision --dry-run
   openvlm provision --force                    # fresh dongle, no GPIO1 strap
 
-VID and PID cannot be set; they are sourced from the OpenVLM constants.
-The validator runs before any HID transfer; bad values exit non-zero with
-no device side-effects.
+VID, PID, product-string, and manufacturer-string cannot be set; they are
+sourced from the compiled-in OpenVLM defaults. The validator runs before
+any HID transfer; bad values exit non-zero with no device side-effects.
 `,
 	RunE: runProvision,
 }

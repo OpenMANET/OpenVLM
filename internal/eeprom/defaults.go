@@ -20,9 +20,12 @@ var OpenVLMDefaults = View{
 	ExtendedFieldsValid: true,
 	SerialEnable:        false,
 
-	// Strings — overridden per device by `--serial`/`--product-string`.
+	// Strings. ProductString and ManufacturerString are write-locked at the
+	// input layers (YAML, --flag, `update`); the chip always receives these
+	// compiled-in values. Only Serial is overridable per device via
+	// `--serial`.
 	Serial:             "",
-	ProductString:      "OpenVLM 1.0",
+	ProductString:      "OpenVLM",
 	ManufacturerString: "BuildsByShane",
 
 	// Word 0x2A — datasheet defaults.

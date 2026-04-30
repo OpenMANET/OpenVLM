@@ -43,14 +43,16 @@ func withFakeBackend(t *testing.T) *hidx.FakeDeviceState {
 	return state
 }
 
-// TestProvision_EndToEnd runs `openvlm provision --product-string foo` against
-// a fake backend and verifies the EEPROM bytes after the command.
+// TestProvision_EndToEnd runs `openvlm provision --serial foo` against
+// a fake backend and verifies the EEPROM bytes after the command. Serial
+// is the only string field still user-overridable; product-string and
+// manufacturer-string are write-locked to the compiled defaults.
 func TestProvision_EndToEnd(t *testing.T) {
 	state := withFakeBackend(t)
 
 	resetOverrides()
 
-	rootCmd.SetArgs([]string{"provision", "--product-string", "OpenVLM v9"})
+	rootCmd.SetArgs([]string{"provision", "--serial", "00001234"})
 
 	var (
 		stdout bytes.Buffer
@@ -66,8 +68,12 @@ func TestProvision_EndToEnd(t *testing.T) {
 
 	view, _, err := decodeBytes(got)
 	require.NoError(t, err)
-	assert.Equal(t, "OpenVLM v9", view.ProductString,
+	assert.Equal(t, "00001234", view.Serial,
 		"the override flag must reach the device's EEPROM")
+	assert.Equal(t, eeprom.OpenVLMDefaults.ProductString, view.ProductString,
+		"product-string must always equal the compiled default")
+	assert.Equal(t, eeprom.OpenVLMDefaults.ManufacturerString, view.ManufacturerString,
+		"manufacturer-string must always equal the compiled default")
 
 	// VID/PID must be the constants regardless of any default-tweaking.
 	assert.Equal(t, cm108.OpenVLMVendorID,
@@ -84,14 +90,31 @@ func TestUpdate_EndToEnd(t *testing.T) {
 
 	resetOverrides()
 
-	rootCmd.SetArgs([]string{"update", "product-string", "Updated"})
+	rootCmd.SetArgs([]string{"update", "serial", "Updated01"})
 
 	require.NoError(t, rootCmd.Execute())
 
 	got := state.EEPROM()
 	view, _, err := decodeBytes(got)
 	require.NoError(t, err)
-	assert.Equal(t, "Updated", view.ProductString)
+	assert.Equal(t, "Updated01", view.Serial)
+}
+
+// TestUpdate_RejectsProductString mirrors the protocol-level write-lock at
+// the CLI surface for the product-string field. `openvlm update
+// product-string ...` must never write anything.
+func TestUpdate_RejectsProductString(t *testing.T) {
+	state := withFakeBackend(t)
+
+	resetOverrides()
+
+	before := state.EEPROM()
+
+	rootCmd.SetArgs([]string{"update", "product-string", "Hijacked"})
+	err := rootCmd.Execute()
+	require.Error(t, err)
+	assert.Equal(t, before, state.EEPROM(),
+		"device must not change when update product-string is rejected")
 }
 
 // TestUpdate_RejectsVID mirrors the protocol-level VID lock at the CLI
@@ -120,10 +143,10 @@ func TestProvision_OverridesYAML(t *testing.T) {
 
 	dir := t.TempDir()
 	yamlPath := filepath.Join(dir, "overrides.yaml")
-	require.NoError(t, os.WriteFile(yamlPath, []byte("dac-init-volume: -20\nproduct-string: from-yaml\n"), 0o600))
+	require.NoError(t, os.WriteFile(yamlPath, []byte("dac-init-volume: -20\nserial: from-yaml\n"), 0o600))
 
-	// CLI dac-init-volume should win over YAML's -20; YAML's product-string
-	// should win over OpenVLMDefaults.
+	// CLI dac-init-volume should win over YAML's -20; YAML's serial should
+	// win over OpenVLMDefaults.
 	rootCmd.SetArgs([]string{"provision", "--overrides", yamlPath, "--dac-init-volume", "-12"})
 
 	require.NoError(t, rootCmd.Execute())
@@ -132,7 +155,7 @@ func TestProvision_OverridesYAML(t *testing.T) {
 	view, _, err := decodeBytes(got)
 	require.NoError(t, err)
 	assert.Equal(t, -12, view.DACInitVolume, "CLI flag must beat YAML")
-	assert.Equal(t, "from-yaml", view.ProductString, "YAML must beat compiled default")
+	assert.Equal(t, "from-yaml", view.Serial, "YAML must beat compiled default")
 }
 
 // TestWrite_RejectsNon128ByteRawWithoutYAMLLook ensures the input-size

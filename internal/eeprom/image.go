@@ -268,41 +268,56 @@ func encodeDBHighByte(db int) uint16 {
 	return uint16(int8(db)) << 8
 }
 
-// decodeString reads a length-prefixed ASCII string from the EEPROM. The
-// CM108B packs strings with an unusual layout per datasheet §7.1.3:
+// decodeString reads a length-prefixed ASCII string from the EEPROM and
+// returns it as a Go string.
 //
-//	header word: high byte = first character, low byte = total length in bytes
-//	body words : remaining characters, two per word, big-endian (per the table's "first byte")
+// CM108B string layout per datasheet §7.1.3:
 //
-// To stay robust against vendor variations we also accept little-endian
-// body words; the discriminator is whether the byte at offset 0 of the body
-// is a printable ASCII char.
+//	header word: high byte = first ASCII character
+//	             low  byte = USB string descriptor bLength
+//	                       = 2 + 2 * char_count
+//	                       (datasheet hint: 0x3E -> 30 char, 0x40 -> 31 char)
+//	body words : remaining ASCII characters, one per byte
+//
+// The chip stores plain ASCII in EEPROM but expands each ASCII byte to a
+// UTF-16LE pair when serving the USB string descriptor; that is why the
+// length field uses USB descriptor math (2 header bytes + 2 bytes per
+// emitted UTF-16 char) rather than a raw character count.
 func decodeString(img *Image, headerAddr, bodyAddr, maxBytes uint8) string {
 	header := img.Word(headerAddr)
 
 	first := byte(header >> 8) // first character
-	length := int(header & 0xFF)
+	bLength := int(header & 0xFF)
 
-	if length == 0 {
+	// Empty / unprogrammed string.
+	if bLength == 0 {
 		return ""
 	}
-	// Clamp to declared max (header byte + body bytes).
-	if length > int(maxBytes)+1 {
-		length = int(maxBytes) + 1
+	// A valid USB string descriptor bLength is at least 2 (header bytes
+	// only, zero-character string) and even (because each char contributes
+	// two UTF-16 bytes). Anything else is malformed — surface as empty.
+	if bLength < 2 || bLength%2 != 0 {
+		return ""
 	}
 
-	out := make([]byte, 0, length)
-
-	if length > 0 {
-		out = append(out, first)
+	charCount := (bLength - 2) / 2
+	if charCount == 0 {
+		return ""
 	}
-	// Body bytes follow, two per word. CM108B writes them as raw byte
-	// sequences within little-endian words; reading the body as bytes from
-	// the image produces the natural ASCII order on little-endian machines.
-	bodyBytes := int(maxBytes)
+	// Clamp to the declared maximum: 1 header char + maxBytes body chars.
+	if charCount > int(maxBytes)+1 {
+		charCount = int(maxBytes) + 1
+	}
+
+	out := make([]byte, 0, charCount)
+	out = append(out, first)
+
+	// Body bytes follow, one ASCII char per byte. The image is little-endian
+	// on word boundaries; reading bytes directly produces the natural ASCII
+	// order.
 	bodyOff := int(bodyAddr) * 2
 
-	for i := 0; i < bodyBytes && i+1 < length; i++ {
+	for i := 0; i+1 < charCount; i++ {
 		if bodyOff+i >= len(img) {
 			break
 		}
@@ -319,6 +334,10 @@ func decodeString(img *Image, headerAddr, bodyAddr, maxBytes uint8) string {
 	return string(out)
 }
 
+// encodeString writes a Go string into the EEPROM using the layout
+// documented on decodeString. The length byte is the USB string descriptor
+// bLength (2 + 2 * char_count) so that the chip serves the full string
+// to the USB host instead of truncating it.
 func encodeString(img *Image, headerAddr, bodyAddr uint8, s string, maxBytes uint8) {
 	if len(s) > int(maxBytes) {
 		s = s[:maxBytes]
@@ -328,7 +347,7 @@ func encodeString(img *Image, headerAddr, bodyAddr uint8, s string, maxBytes uin
 
 	if len(s) > 0 {
 		header = uint16(s[0]) << 8
-		header |= uint16(len(s) & 0xFF)
+		header |= uint16((2 + 2*len(s)) & 0xFF)
 	}
 
 	img.SetWord(headerAddr, header)

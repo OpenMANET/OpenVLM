@@ -35,6 +35,81 @@ func TestEncodeDefaults_Roundtrip(t *testing.T) {
 		"defaults must round-trip bit-for-bit")
 }
 
+// TestEncodeString_LengthIsUSBBLength asserts the EEPROM string-header
+// length byte stores the USB string descriptor's bLength (2 + 2*char_count)
+// — not the raw character count. This is the bug that surfaced as
+// truncated strings ("Open" instead of "OpenVLM 1.0", "Build" instead of
+// "BuildsByShane") on macOS during on-hardware smoke testing: the chip
+// uses this byte verbatim as bLength when serving Get_Descriptor(STRING).
+func TestEncodeString_LengthIsUSBBLength(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		input      string
+		wantLength byte
+	}{
+		{"", 0},                                // empty string: header word stays zero
+		{"X", 4},                               // 2 + 2*1
+		{"OpenVLM 1.0", 24},                    // 2 + 2*11
+		{"BuildsByShane", 28},                  // 2 + 2*13
+		{"OpenMANET", 20},                      // 2 + 2*9
+		{"012345678901234567890123456789", 62}, // 30 chars → 0x3E (datasheet hint)
+	}
+
+	for _, tc := range cases {
+		tc := tc
+
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+
+			view := eeprom.OpenVLMDefaults
+			view.ProductString = tc.input
+
+			var tail [eeprom.WordCount - 0x33]uint16
+
+			img := view.Encode(0x0D8C, 0x0012, tail)
+
+			// Product-string header is word 0x0A. Low byte of the
+			// little-endian word lives at byte offset 0x14.
+			gotLength := img[0x14]
+			assert.Equal(t, tc.wantLength, gotLength,
+				"product-string header length byte")
+		})
+	}
+}
+
+// TestEncodeString_RoundTrip confirms the encode/decode pair stays
+// consistent after the bLength fix — round-tripping through Image must
+// recover the original string.
+func TestEncodeString_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{"", "X", "OpenVLM 1.0", "BuildsByShane", "OpenMANET"}
+
+	for _, s := range cases {
+		s := s
+
+		t.Run(s, func(t *testing.T) {
+			t.Parallel()
+
+			view := eeprom.OpenVLMDefaults
+			view.ProductString = s
+			view.ManufacturerString = s
+
+			var tail [eeprom.WordCount - 0x33]uint16
+
+			img := view.Encode(0x0D8C, 0x0012, tail)
+
+			decoded, _, err := img.Decode()
+			require.NoError(t, err)
+			assert.Equal(t, s, decoded.ProductString,
+				"product-string must round-trip after bLength fix")
+			assert.Equal(t, s, decoded.ManufacturerString,
+				"manufacturer-string must round-trip after bLength fix")
+		})
+	}
+}
+
 // TestImageDecode_RejectsBadMagic ensures that a fresh (zeroed) image is
 // surfaced to the user as "unprogrammed" rather than silently decoded into
 // nonsense.
@@ -71,11 +146,11 @@ func TestApplyOverrides_FieldByField(t *testing.T) {
 			},
 		},
 		{
-			name: "product-string",
-			mut:  func(p *eeprom.PartialView) { s := "OpenVLM v2"; p.ProductString = &s },
+			name: "serial",
+			mut:  func(p *eeprom.PartialView) { s := "00001234"; p.Serial = &s },
 			check: func(t *testing.T, v eeprom.View) {
 				t.Helper()
-				assert.Equal(t, "OpenVLM v2", v.ProductString)
+				assert.Equal(t, "00001234", v.Serial)
 			},
 		},
 		{
@@ -155,15 +230,19 @@ func TestApplyOverrides_LayeredPrecedence(t *testing.T) {
 		"YAML override must beat compiled defaults")
 }
 
-// TestUnmarshalPartial_RejectsVIDPID enforces the YAML-side half of the
-// VID/PID write-lock. Both keys must produce a clear, message-stable error.
-func TestUnmarshalPartial_RejectsVIDPID(t *testing.T) {
+// TestUnmarshalPartial_RejectsLockedKeys enforces the YAML-side half of the
+// write-lock for VID, PID, product-string, and manufacturer-string. Each
+// must produce a clear, message-stable error so users immediately
+// understand which keys are not user-programmable.
+func TestUnmarshalPartial_RejectsLockedKeys(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
 		"vid: 0x0d8c\n",
 		"pid: 0x0012\n",
-		"product-string: foo\nvid: 0x0d8c\n",
+		"product-string: foo\n",
+		"manufacturer-string: foo\n",
+		"dac-init-volume: -6\nproduct-string: foo\n",
 	}
 
 	for _, doc := range cases {

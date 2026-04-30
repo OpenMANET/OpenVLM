@@ -39,6 +39,10 @@ func ApplyUpdate(base View, field, value string) (View, error) {
 		return base, fmt.Errorf("%w: %q (VID/PID are sourced from compiled-in OpenVLM constants)",
 			ErrFieldLocked, field)
 
+	case FieldProductString, FieldManufacturerString:
+		return base, fmt.Errorf("%w: %q (product/manufacturer strings are sourced from compiled-in OpenVLM defaults)",
+			ErrFieldLocked, field)
+
 	case FieldExtendedFieldsValid:
 		b, err := parseBool(field, value)
 		if err != nil {
@@ -56,10 +60,6 @@ func ApplyUpdate(base View, field, value string) (View, error) {
 
 	case FieldSerial:
 		base.Serial = value
-	case FieldProductString:
-		base.ProductString = value
-	case FieldManufacturerString:
-		base.ManufacturerString = value
 
 	case FieldDACInitVolume:
 		n, err := parseDecimalInt(field, value)

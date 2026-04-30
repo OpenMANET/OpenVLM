@@ -94,8 +94,8 @@ func TestWriteImage_RejectsWrongVID(t *testing.T) {
 	beforeBytes := state.EEPROM()
 
 	var img eeprom.Image
-	img.SetWord(0x00, 0x6701)         // valid magic + reserved bits
-	img.SetWord(0x01, 0x1234)         // wrong VID
+	img.SetWord(0x00, 0x6701) // valid magic + reserved bits
+	img.SetWord(0x01, 0x1234) // wrong VID
 	img.SetWord(0x02, cm108.OpenVLMProductID)
 
 	err := eeprom.WriteImage(tr, img)
@@ -169,4 +169,4 @@ func (f *flakyTransport) GetInputReport(_ byte, buf []byte) (int, error) {
 }
 
 func (f *flakyTransport) SetOutputReport(_ byte, _ []byte) (int, error) { return 5, nil }
-func (f *flakyTransport) Close() error                                   { return nil }
+func (f *flakyTransport) Close() error                                  { return nil }
