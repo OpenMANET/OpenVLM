@@ -1,6 +1,5 @@
 env:
   - GO111MODULE=on
-  - CGO_ENABLED=1
 before:
   hooks:
     - go mod tidy
@@ -8,10 +7,15 @@ gomod:
   proxy: false
 builds:
   - id: linux
+    env:
+      - CGO_ENABLED=0
     ldflags:
-      - '-s -w -extldflags "-static"'
+      - '-s -w'
+      - '-X github.com/openmanet/openvlm/cmd.Version={{.Version}}'
+      - '-X github.com/openmanet/openvlm/cmd.Commit={{.Commit}}'
+      - '-X github.com/openmanet/openvlm/cmd.Date={{.Date}}'
     flags:
-      - "-a"
+      - "-trimpath"
     goos:
       - linux
     goarch:
@@ -19,10 +23,15 @@ builds:
       - arm64
     mod_timestamp: "{{ .CommitTimestamp }}"
   - id: darwin
+    env:
+      - CGO_ENABLED=1
     ldflags:
       - '-s -w'
+      - '-X github.com/openmanet/openvlm/cmd.Version={{.Version}}'
+      - '-X github.com/openmanet/openvlm/cmd.Commit={{.Commit}}'
+      - '-X github.com/openmanet/openvlm/cmd.Date={{.Date}}'
     flags:
-      - "-a"
+      - "-trimpath"
     goos:
       - darwin
     goarch:
@@ -30,10 +39,15 @@ builds:
       - amd64
     mod_timestamp: "{{ .CommitTimestamp }}"
   - id: windows
+    env:
+      - CGO_ENABLED=0
     ldflags:
       - '-s -w'
+      - '-X github.com/openmanet/openvlm/cmd.Version={{.Version}}'
+      - '-X github.com/openmanet/openvlm/cmd.Commit={{.Commit}}'
+      - '-X github.com/openmanet/openvlm/cmd.Date={{.Date}}'
     flags:
-      - "-a"
+      - "-trimpath"
     goos:
       - windows
     goarch:
