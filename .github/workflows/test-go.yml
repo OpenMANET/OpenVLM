@@ -22,9 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
-        with:
-          submodules: "recursive"
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -34,16 +32,14 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6
+          version: v2.11.4
 
   test:
     runs-on: ubuntu-latest
     needs: lint
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
-        with:
-          submodules: "recursive"
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -51,82 +47,22 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Install Dependencies
-        run: sudo apt update && sudo apt install -y build-essential pkg-config
-
-      - name: Compile Alfred Go Bindings
-        run: make alfred
+        run: sudo apt update && sudo apt install -y build-essential pkg-config libhidapi-dev libusb-1.0-0-dev libudev-dev
 
       - name: Run tests
         run: make test
 
       - name: Archive code coverage results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: code-coverage
           path: coverage.out
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage.out
           fail_ci_if_error: false
           report_type: coverage
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-  integration_test:
-    name: "Integration tests"
-    runs-on: ubuntu-latest
-    needs: lint
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-        with:
-          submodules: "recursive"
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-
-      - name: Install Dependencies
-        run: sudo apt update && sudo apt install -y build-essential libnl-3-dev libnl-genl-3-dev libgps-dev libcap-dev pkg-config libopus-dev libopusfile-dev portaudio19-dev batctl net-tools alfred
-
-      - name: Compile Alfred Go Bindings
-        run: make alfred
-
-      - name: Run integration tests
-        run: make integration-test
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.out
-          flags: integration
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-  benchmark:
-    name: "Benchmarks"
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-        with:
-          submodules: "recursive"
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-
-      - name: Install Dependencies
-        run: sudo apt update && sudo apt install -y build-essential libnl-3-dev libnl-genl-3-dev libgps-dev libcap-dev pkg-config libopus-dev libopusfile-dev portaudio19-dev batctl net-tools alfred
-
-      - name: Compile Alfred Go Bindings
-        run: make alfred
-
-      - name: Run benchmarks
-        run: make benchmark
