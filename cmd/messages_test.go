@@ -103,6 +103,22 @@ func TestForceWarning(t *testing.T) {
 		msgForceWarning())
 }
 
+// TestPowerShellStdoutGuardMessage pins the wording of the
+// `openvlm read` PowerShell-stdout refusal so a future tone-tweak shows up
+// as a deliberate diff. The body must include the three remedies (-o, cmd
+// /c, --force-stdout) so the user is never left without an escape hatch.
+func TestPowerShellStdoutGuardMessage(t *testing.T) {
+	t.Parallel()
+
+	msg := errPowerShellStdoutGuard().Error()
+
+	assert.Contains(t, msg, "PowerShell")
+	assert.Contains(t, msg, "UTF-16")
+	assert.Contains(t, msg, "-o backup.bin")
+	assert.Contains(t, msg, "cmd /c")
+	assert.Contains(t, msg, "--force-stdout")
+}
+
 func TestChipBlank(t *testing.T) {
 	t.Parallel()
 

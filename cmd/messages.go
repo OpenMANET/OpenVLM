@@ -82,9 +82,19 @@ The output is 128 bytes of raw binary. You can pipe it back through
 
 Examples:
   openvlm read -o backup.bin
-  openvlm read > backup.bin`
+  openvlm read > backup.bin
+
+On Windows PowerShell, '>' and '|' silently corrupt binary streams
+(UTF-16 BOM / ASCII re-encoding). Prefer -o, or wrap the call with
+'cmd /c "openvlm read > backup.bin"'. The CLI refuses to write a raw
+binary EEPROM image to stdout when PowerShell is the parent shell;
+pass --force-stdout to override if you know your pipeline preserves
+raw bytes.`
 
 	flagReadOutputHelp = "file to write the 128-byte image to (default: stdout)"
+
+	flagReadForceStdoutHelp = "bypass the Windows PowerShell binary-stdout guard " +
+		"(use only if you know your shell preserves raw bytes)"
 
 	useDump   = "dump"
 	shortDump = "Show the device's configuration as YAML, text, or hex"
@@ -258,6 +268,21 @@ func msgNoDevices() string {
 
 func msgForceWarning() string {
 	return "Warning: device's identity bit isn't set; continuing because --force was passed."
+}
+
+// errPowerShellStdoutGuard is returned when `openvlm read` would write a
+// raw 128-byte EEPROM image to stdout from a PowerShell session, where
+// PowerShell's `>` (UTF-16LE BOM) and `|` (ASCII via $OutputEncoding)
+// silently corrupt binary streams. The message offers three remedies in
+// order of preference.
+func errPowerShellStdoutGuard() error {
+	return errors.New(
+		"PowerShell's '>' redirect and '|' pipe corrupt binary streams " +
+			"(stdout would be re-encoded as UTF-16 or ASCII, not raw bytes).\n" +
+			"Use one of:\n" +
+			"  openvlm read -o backup.bin                    write directly to a file (recommended)\n" +
+			"  cmd /c \"openvlm read > backup.bin\"            cmd.exe redirect is binary-safe\n" +
+			"  openvlm read --force-stdout > backup.bin      override this check")
 }
 
 // msgChipBlank is the warning printed by 'dump --format text' when the chip

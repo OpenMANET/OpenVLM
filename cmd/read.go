@@ -9,11 +9,15 @@ import (
 )
 
 //nolint:gochecknoglobals // cobra subcommand state
-var readOutput string
+var (
+	readOutput      string
+	readForceStdout bool
+)
 
 func init() { //nolint:gochecknoinits // cobra subcommand self-registration
 	rootCmd.AddCommand(readCmd)
 	readCmd.Flags().StringVarP(&readOutput, "output", "o", "", flagReadOutputHelp)
+	readCmd.Flags().BoolVar(&readForceStdout, "force-stdout", false, flagReadForceStdoutHelp)
 }
 
 //nolint:gochecknoglobals // cobra command literal
@@ -38,6 +42,10 @@ func runRead(cmd *cobra.Command, _ []string) error {
 	}
 
 	if readOutput == "" {
+		if !readForceStdout && stdoutIsPipe() && parentIsPowerShell() {
+			return &usageError{err: errPowerShellStdoutGuard()}
+		}
+
 		if _, err := cmd.OutOrStdout().Write(img[:]); err != nil {
 			return fmt.Errorf("couldn't write to stdout: %w", err)
 		}
