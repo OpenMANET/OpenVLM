@@ -23,13 +23,13 @@ import (
 // =====================================================================
 
 const (
-	shortRoot = "Read, write, and validate the configuration on OpenVLM USB dongles"
+	shortRoot = "Read, write, and validate the configuration on OpenVLM USB devices"
 	longRoot  = `openvlm reads, writes, and validates the configuration on OpenVLM
-USB audio dongles.
+USB audio devices.
 
 What you can do:
-  openvlm list        show every dongle plugged in
-  openvlm identify    check if a dongle is OpenVLM
+  openvlm list        show every device plugged in
+  openvlm identify    check if a device is OpenVLM
   openvlm read        save the configuration to a file
   openvlm dump        show the configuration
   openvlm write       load a configuration from a file
@@ -42,24 +42,24 @@ Run 'openvlm <verb> --help' for details on each verb.
 Add --verbose (-v) to any command for more technical detail in
 errors, warnings, and diagnostics.`
 
-	flagSerialHelp  = "pick the dongle whose USB serial-number string matches this value"
+	flagSerialHelp  = "pick the device whose USB serial-number string matches this value"
 	flagVerboseHelp = "show technical detail in errors, warnings, and diagnostics"
 
 	useList   = "list"
-	shortList = "Show every OpenVLM dongle plugged in"
-	longList  = `Lists every USB audio dongle plugged in that looks like an OpenVLM.
+	shortList = "Show every OpenVLM device plugged in"
+	longList  = `Lists every USB audio device plugged in that looks like an OpenVLM.
 
-For each dongle it shows the serial number, the device path, whether
-the dongle is confirmed as OpenVLM hardware, and any error from probing.
+For each device it shows the serial number, the device path, whether
+the device is confirmed as OpenVLM hardware, and any error from probing.
 
 Example:
   openvlm list
 
-Exits 0 if at least one matching dongle was found, 1 if none were.`
+Exits 0 if at least one matching device was found, 1 if none were.`
 
 	useIdentify   = "identify"
-	shortIdentify = "Check if a dongle is OpenVLM (exit 0 if yes, 3 if no)"
-	longIdentify  = `Checks whether the selected dongle is an OpenVLM (its identity
+	shortIdentify = "Check if a device is OpenVLM (exit 0 if yes, 3 if no)"
+	longIdentify  = `Checks whether the selected device is an OpenVLM (its identity
 bit is set).
 
 Useful in shell scripts:
@@ -69,26 +69,36 @@ Useful in shell scripts:
   fi
 
 Exit codes:
-  0  the dongle is OpenVLM
-  1  no dongle plugged in, permission denied, or other error
-  3  a dongle is plugged in but it isn't OpenVLM`
+  0  the device is OpenVLM
+  1  no device plugged in, permission denied, or other error
+  3  a device is plugged in but it isn't OpenVLM`
 
 	useRead   = "read"
-	shortRead = "Save the dongle's configuration to a file (or stdout)"
-	longRead  = `Saves the dongle's full configuration to a file or pipes it to stdout.
+	shortRead = "Save the device's configuration to a file (or stdout)"
+	longRead  = `Saves the device's full configuration to a file or pipes it to stdout.
 
 The output is 128 bytes of raw binary. You can pipe it back through
 'openvlm write -i <file>' to restore an exact copy.
 
 Examples:
   openvlm read -o backup.bin
-  openvlm read > backup.bin`
+  openvlm read > backup.bin
+
+On Windows PowerShell, '>' and '|' silently corrupt binary streams
+(UTF-16 BOM / ASCII re-encoding). Prefer -o, or wrap the call with
+'cmd /c "openvlm read > backup.bin"'. The CLI refuses to write a raw
+binary EEPROM image to stdout when PowerShell is the parent shell;
+pass --force-stdout to override if you know your pipeline preserves
+raw bytes.`
 
 	flagReadOutputHelp = "file to write the 128-byte image to (default: stdout)"
 
+	flagReadForceStdoutHelp = "bypass the Windows PowerShell binary-stdout guard " +
+		"(use only if you know your shell preserves raw bytes)"
+
 	useDump   = "dump"
-	shortDump = "Show the dongle's configuration as YAML, text, or hex"
-	longDump  = `Reads the dongle's configuration and shows it in a readable form.
+	shortDump = "Show the device's configuration as YAML, text, or hex"
+	longDump  = `Reads the device's configuration and shows it in a readable form.
 
 Formats:
   yaml   editable config you can pipe back into 'openvlm write -i -' (default)
@@ -103,15 +113,15 @@ Examples:
 	flagDumpFormatHelp = "output format: yaml | text | hex"
 
 	useWrite   = "write"
-	shortWrite = "Load a configuration onto the dongle (binary or YAML)"
-	longWrite  = `Writes a full configuration to the dongle.
+	shortWrite = "Load a configuration onto the device (binary or YAML)"
+	longWrite  = `Writes a full configuration to the device.
 
 Accepts two input forms:
   - a 128-byte binary backup from 'openvlm read'
   - a YAML config (full or partial) — missing fields are filled from
     the OpenVLM defaults
 
-Every value is checked before any byte hits the dongle, and each word
+Every value is checked before any byte hits the device, and each word
 is read back after writing to make sure it stuck.
 
 Examples:
@@ -121,22 +131,22 @@ Examples:
   openvlm dump --format yaml | openvlm write -i -
 
 A few fields can't be changed — VID, PID, product-string, and
-manufacturer-string are part of the dongle's identity. The --force
-flag is only needed for fresh dongles whose identity bit hasn't been
+manufacturer-string are part of the device's identity. The --force
+flag is only needed for fresh devices whose identity bit hasn't been
 set yet.`
 
 	flagWriteInputHelp = "input file: 128-byte raw .bin (matches 'read' output) or YAML " +
 		"(matches 'dump --format yaml'); use - for stdin"
-	flagWriteForceHelp = "program a dongle even if its identity bit isn't set yet"
+	flagWriteForceHelp = "program a device even if its identity bit isn't set yet"
 
 	useUpdate   = "update <field> <value>"
-	shortUpdate = "Change one setting on the dongle"
+	shortUpdate = "Change one setting on the device"
 
-	flagUpdateForceHelp = "program a dongle even if its identity bit isn't set yet"
+	flagUpdateForceHelp = "program a device even if its identity bit isn't set yet"
 
 	useProvision   = "provision"
 	shortProvision = "Apply the OpenVLM factory defaults, with optional overrides"
-	longProvision  = `Writes the OpenVLM factory defaults to the dongle, with optional
+	longProvision  = `Writes the OpenVLM factory defaults to the device, with optional
 overrides.
 
 Overrides come in two layers (later wins over earlier):
@@ -149,35 +159,35 @@ Examples:
   openvlm provision --overrides factory.yaml
   openvlm provision --overrides factory.yaml --dac-init-volume -6
   openvlm provision --dry-run                  # preview without writing
-  openvlm provision --force                    # fresh dongle, skip safety check
+  openvlm provision --force                    # fresh device, skip safety check
 
 A few values can't be overridden — VID, PID, product-string, and
-manufacturer-string are part of the dongle's identity. Bad values are
-caught before any byte hits the dongle.`
+manufacturer-string are part of the device's identity. Bad values are
+caught before any byte hits the device.`
 
 	flagProvisionOverridesHelp = "YAML file whose keys override the factory defaults"
-	flagProvisionDryRunHelp    = "preview the configuration without writing it to the dongle"
-	flagProvisionForceHelp     = "program a dongle even if its identity bit isn't set yet"
+	flagProvisionDryRunHelp    = "preview the configuration without writing it to the device"
+	flagProvisionForceHelp     = "program a device even if its identity bit isn't set yet"
 
 	useWipe   = "wipe"
-	shortWipe = "Erase the dongle's configuration"
-	longWipe  = `Erases everything in the dongle's configuration memory.
+	shortWipe = "Erase the device's configuration"
+	longWipe  = `Erases everything in the device's configuration memory.
 
-After a wipe, the dongle behaves like a brand-new chip:
+After a wipe, the device behaves like a brand-new chip:
   - it identifies as a generic CM108 (not OpenVLM)
   - re-provisioning it will require --force
 
 Safety:
   --yes is required. There's no interactive prompt.
-  --force is required if the dongle isn't already confirmed as OpenVLM.
+  --force is required if the device isn't already confirmed as OpenVLM.
 
 Examples:
   openvlm wipe --yes
   openvlm wipe --yes --pattern 00
-  openvlm wipe --yes --force        # for fresh or post-wipe dongles`
+  openvlm wipe --yes --force        # for fresh or post-wipe devices`
 
 	flagWipeYesHelp     = "required confirmation — wipe refuses to run without this"
-	flagWipeForceHelp   = "wipe a dongle even if its identity bit isn't set yet"
+	flagWipeForceHelp   = "wipe a device even if its identity bit isn't set yet"
 	flagWipePatternHelp = "byte pattern to write to every word: FF (default, factory-blank) or 00"
 )
 
@@ -186,7 +196,7 @@ Examples:
 // constant expression.
 //
 //nolint:gochecknoglobals // package-level help text built at init
-var longUpdate = `Changes one setting on the dongle and writes the result back.
+var longUpdate = `Changes one setting on the device and writes the result back.
 
 Values are entered as plain decimal numbers, true/false, or named
 values:
@@ -201,25 +211,27 @@ Available fields:
   ` + eeprom.FieldList() + `
 
 A few fields can't be changed — VID, PID, product-string, and
-manufacturer-string are part of the dongle's identity.`
+manufacturer-string are part of the device's identity.`
 
 // =====================================================================
 // Success and progress messages
 // =====================================================================
 
-// displayName is the user-facing name for a dongle. Prefer the USB serial
-// number (stable across plug-in/plug-out) over the platform-specific device
-// path; fall back to the path if the dongle has no serial.
-func displayName(serial, path string) string {
+// displayName is the user-facing name for a device. Prefer the USB serial
+// number (stable across plug-in/plug-out); fall back to a generic "OpenVLM
+// device" label when the device has no serial, since the OS device path is
+// noisy on Windows (`\\?\hid#vid_...#{guid}`) and not useful to most users.
+// Pass --verbose to surface the path on error.
+func displayName(serial, _ string) string {
 	if serial != "" {
 		return serial
 	}
 
-	return path
+	return "OpenVLM device"
 }
 
 func msgIdentified(name string) string {
-	return fmt.Sprintf("%s: confirmed — this is an OpenVLM dongle.", name)
+	return fmt.Sprintf("%s: confirmed — this is an OpenVLM device.", name)
 }
 
 func msgWritten(name string, n int) string {
@@ -246,8 +258,8 @@ func msgReadComplete(name string, n int, dest string) string {
 	return fmt.Sprintf("%s: saved %d bytes to %s.", name, n, dest)
 }
 
-func msgNoDongles() string {
-	return "No OpenVLM dongles are plugged in."
+func msgNoDevices() string {
+	return "No OpenVLM devices are plugged in."
 }
 
 // =====================================================================
@@ -255,7 +267,22 @@ func msgNoDongles() string {
 // =====================================================================
 
 func msgForceWarning() string {
-	return "Warning: dongle's identity bit isn't set; continuing because --force was passed."
+	return "Warning: device's identity bit isn't set; continuing because --force was passed."
+}
+
+// errPowerShellStdoutGuard is returned when `openvlm read` would write a
+// raw 128-byte EEPROM image to stdout from a PowerShell session, where
+// PowerShell's `>` (UTF-16LE BOM) and `|` (ASCII via $OutputEncoding)
+// silently corrupt binary streams. The message offers three remedies in
+// order of preference.
+func errPowerShellStdoutGuard() error {
+	return errors.New(
+		"PowerShell's '>' redirect and '|' pipe corrupt binary streams " +
+			"(stdout would be re-encoded as UTF-16 or ASCII, not raw bytes).\n" +
+			"Use one of:\n" +
+			"  openvlm read -o backup.bin                    write directly to a file (recommended)\n" +
+			"  cmd /c \"openvlm read > backup.bin\"            cmd.exe redirect is binary-safe\n" +
+			"  openvlm read --force-stdout > backup.bin      override this check")
 }
 
 // msgChipBlank is the warning printed by 'dump --format text' when the chip
@@ -263,11 +290,11 @@ func msgForceWarning() string {
 func msgChipBlank(verbose bool, vid, pid uint16) string {
 	if verbose {
 		return fmt.Sprintf(
-			"Warning: this dongle's configuration looks blank or corrupted. (read VID:PID 0x%04X:0x%04X)",
+			"Warning: this device's configuration looks blank or corrupted. (read VID:PID 0x%04X:0x%04X)",
 			vid, pid)
 	}
 
-	return "Warning: this dongle's configuration looks blank or corrupted."
+	return "Warning: this device's configuration looks blank or corrupted."
 }
 
 // =====================================================================
@@ -290,22 +317,22 @@ func friendlyError(err error, verbose bool) string {
 	// check the more specific sentinel first.
 	switch {
 	case errors.Is(err, cm108.ErrSerialNotFound):
-		return "No dongle has the serial number you asked for.\n" +
+		return "No device has the serial number you asked for.\n" +
 			"Run 'openvlm list' to see what's connected."
 
 	case errors.Is(err, cm108.ErrAmbiguousDevice):
-		return "More than one dongle is plugged in.\n" +
+		return "More than one device is plugged in.\n" +
 			"Use --serial <serial> to pick which one. Run 'openvlm list' to see them."
 
 	case errors.Is(err, cm108.ErrNoOpenVLMStrapped):
-		return "Dongles are plugged in, but none of them are confirmed as OpenVLM.\n" +
-			"Use --force to program one anyway, or --serial <serial> to pick a specific dongle."
+		return "Devices are plugged in, but none of them are confirmed as OpenVLM.\n" +
+			"Use --force to program one anyway, or --serial <serial> to pick a specific device."
 
 	case errors.Is(err, cm108.ErrNoDevice):
-		return msgNoDongles() + "\nPlug one in and try again."
+		return msgNoDevices() + "\nPlug one in and try again."
 
 	case errors.Is(err, eeprom.ErrFieldLocked):
-		return "That field is part of the dongle's identity and can't be changed by this tool."
+		return "That field is part of the device's identity and can't be changed by this tool."
 
 	case errors.Is(err, eeprom.ErrFieldUnknown):
 		return friendlyUnknownField(err)
@@ -341,7 +368,7 @@ func friendlyUnknownField(err error) string {
 // friendlyVerifyMismatch handles the post-write read-back failure. Verbose
 // mode includes the offending word address; default mode says what to do.
 func friendlyVerifyMismatch(err error, verbose bool) string {
-	base := "The dongle accepted the write but read back a different value.\n" +
+	base := "The device accepted the write but read back a different value.\n" +
 		"Unplug it, plug it back in, and try the command once more."
 
 	var ve *eeprom.VerifyError

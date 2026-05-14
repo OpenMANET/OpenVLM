@@ -32,7 +32,15 @@ func runList(cmd *cobra.Command, _ []string) error {
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(w, "Serial\tDevice\tOpenVLM?\tNotes")
+	// Default mode keeps the table compact and free of platform-specific
+	// device-path noise. The OS path is only useful for disambiguation when
+	// multiple devices have no serial number — surface it via --verbose so
+	// it doesn't pollute the common single-device case.
+	if flagVerbose {
+		fmt.Fprintln(w, "Serial\tOpenVLM?\tPath\tNotes")
+	} else {
+		fmt.Fprintln(w, "Serial\tOpenVLM?\tNotes")
+	}
 
 	for _, d := range descs {
 		note := ""
@@ -50,7 +58,11 @@ func runList(cmd *cobra.Command, _ []string) error {
 			serial = "-"
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", serial, d.Path, strap, note)
+		if flagVerbose {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", serial, strap, d.Path, note)
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\n", serial, strap, note)
+		}
 	}
 
 	return w.Flush() //nolint:wrapcheck // tabwriter.Flush errors are passthrough

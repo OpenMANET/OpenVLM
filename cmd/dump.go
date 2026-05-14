@@ -72,8 +72,13 @@ func printDumpText(cmd *cobra.Command, d cm108.Descriptor, img *eeprom.Image) er
 
 	out := cmd.OutOrStdout()
 
+	device := displayName(d.SerialNumber, d.Path)
+	if flagVerbose {
+		device = d.Path
+	}
+
 	fmt.Fprintf(out, "DEVICE             %s (serial=%s, openvlm=%s)\n",
-		d.Path, displaySerial(d.SerialNumber), openvlm)
+		device, displaySerial(d.SerialNumber), openvlm)
 	fmt.Fprintf(out, "VID:PID            0x%04X:0x%04X  (read-only)\n", img.VID(), img.PID())
 	fmt.Fprintf(out, "PRODUCT-STRING     %s\n", view.ProductString)
 	fmt.Fprintf(out, "MANUFACTURER       %s\n", view.ManufacturerString)

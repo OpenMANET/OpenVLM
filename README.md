@@ -1,8 +1,8 @@
 # OpenVLM
 
-Cross-platform CLI for reading, writing, and validating the EEPROM on **OpenVLM USB audio dongles**.
+Cross-platform CLI for reading, writing, and validating the EEPROM on **OpenVLM USB audio devices**.
 
-OpenVLM dongles are based on the **C-Media CM108B** USB audio chip wired to a 93C46 SPI EEPROM, with a GPIO1 hardware strap that distinguishes OpenVLM-branded hardware from generic CM108-family devices. The `openvlm` CLI talks to the chip exclusively over USB-HID class control transfers — no kernel driver, no vendor blob, no platform-specific cable. The same binary runs on Linux, macOS, and Windows.
+OpenVLM devices are based on the **C-Media CM108B** USB audio chip wired to a 93C46 SPI EEPROM, with a GPIO1 hardware strap that distinguishes OpenVLM-branded hardware from generic CM108-family devices. The `openvlm` CLI talks to the chip exclusively over USB-HID class control transfers — no kernel driver, no vendor blob, no platform-specific cable. The same binary runs on Linux, macOS, and Windows.
 
 ## Install
 
@@ -17,7 +17,7 @@ make build           # produces bin/openvlm
 ## Quick start
 
 ```bash
-openvlm list                                  # find attached dongles
+openvlm list                                  # find attached devices
 openvlm identify                              # confirm GPIO1 strap
 openvlm provision --serial "00001234"         # write OpenVLM defaults
 openvlm dump --format yaml                    # inspect live EEPROM

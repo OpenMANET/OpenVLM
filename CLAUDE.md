@@ -4,7 +4,7 @@ Project-specific guidance for Claude Code working in this repository. Read this 
 
 ## What this project is
 
-`openvlm` is a cross-platform CLI for reading, writing, and validating the EEPROM on **OpenVLM USB audio dongles**. The hardware is a **C-Media CM108B** USB audio chip wired to a 93C46 SPI EEPROM, with a GPIO1 hardware strap that distinguishes OpenVLM-branded dongles from generic CM108-family devices.
+`openvlm` is a cross-platform CLI for reading, writing, and validating the EEPROM on **OpenVLM USB audio devices**. The hardware is a **C-Media CM108B** USB audio chip wired to a 93C46 SPI EEPROM, with a GPIO1 hardware strap that distinguishes OpenVLM-branded devices from generic CM108-family devices.
 
 The CLI talks to the chip exclusively over USB-HID class control transfers (`Get_Input_Report` / `Set_Output_Report`) — there is no kernel driver, no vendor blob, and no platform-specific cable. The CM108B datasheet §7.4 documents the HID protocol; §7.1.3 documents the EEPROM word layout.
 
@@ -15,7 +15,7 @@ These facts are not in the datasheet but are required to read the code correctly
 - **Stock chips ship with a blank EEPROM.** The strings `C-Media Electronics Inc.` / `USB Audio Device` come from the chip's internal ROM, not from EEPROM bytes. There is no "factory image" to read off a virgin device.
 - **VID/PID are write-locked in the CLI.** Both are sourced from compiled-in constants (`cm108.OpenVLMVendorID = 0x0D8C`, `cm108.OpenVLMProductID = 0x0012`). Programming a different VID/PID would prevent this CLI from finding the device, so YAML, `update`, and per-field flags all refuse to set them.
 - **Product/manufacturer strings are also write-locked** to the compiled-in `OpenVLMDefaults` (`OpenVLM` / `BuildsByShane`). Same reason — these are identity, not configuration.
-- **GPIO1 strap is the OpenVLM identity probe.** A generic CM108-family dongle has GPIO1 floating low; an OpenVLM dongle pulls it high. `openvlm identify` and the `requireOpenVLM` gate on every write verb check this. `--force` bypasses for bench / bootstrap work.
+- **GPIO1 strap is the OpenVLM identity probe.** A generic CM108-family device has GPIO1 floating low; an OpenVLM device pulls it high. `openvlm identify` and the `requireOpenVLM` gate on every write verb check this. `--force` bypasses for bench / bootstrap work.
 - **macOS IOKit returns transient `kIOReturnError` (0xE00002BC)** under host-controller pressure during back-to-back HID reports. The protocol layer absorbs this with bounded retries; do not remove the `transferRetries` / `verifyRetries` machinery without a replacement.
 
 ## Datasheet pinning issues (open)
@@ -102,6 +102,7 @@ Project-level rules live in [.claude/rules/](.claude/rules/) and are authoritati
 
 Project-specific additions:
 
+- **Terminology: never use "dongle" in user-facing text or doc comments.** Refer to the hardware as an "OpenVLM device" (or just "device"). Applies to CLI strings, help text, error messages, docs, and Go-doc comments. Internal symbol names (`OpenVLM` etc.) are unaffected.
 - **VID/PID and product/manufacturer strings are write-locked.** Do not add CLI surface to set them — every input layer (YAML, per-field flags, `update`) must reject them with a fixed error message.
 - **`WriteImage` enforces the VID/PID guard.** `WipeAll` is the only documented bypass and exists exclusively for the wipe verb.
 - **Decimal only for numeric input.** `update`, per-field flags, and YAML reject `0x` / `0b` / `0o` prefixes with `ErrHexInput`.

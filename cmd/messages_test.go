@@ -24,8 +24,8 @@ func TestDisplayName(t *testing.T) {
 		want         string
 	}{
 		{name: "serial preferred", serial: "ABC123", path: "/dev/hidraw3", want: "ABC123"},
-		{name: "path fallback when serial empty", serial: "", path: "/dev/hidraw3", want: "/dev/hidraw3"},
-		{name: "both empty returns empty", serial: "", path: "", want: ""},
+		{name: "friendly fallback when serial empty", serial: "", path: "/dev/hidraw3", want: "OpenVLM device"},
+		{name: "friendly fallback when both empty", serial: "", path: "", want: "OpenVLM device"},
 	}
 
 	for _, tc := range cases {
@@ -48,7 +48,7 @@ func TestSuccessMessages(t *testing.T) {
 		{
 			name: "msgIdentified",
 			got:  msgIdentified("ABC123"),
-			want: "ABC123: confirmed — this is an OpenVLM dongle.",
+			want: "ABC123: confirmed — this is an OpenVLM device.",
 		},
 		{
 			name: "msgWritten",
@@ -81,9 +81,9 @@ func TestSuccessMessages(t *testing.T) {
 			want: "ABC123: saved 128 bytes to backup.bin.",
 		},
 		{
-			name: "msgNoDongles",
-			got:  msgNoDongles(),
-			want: "No OpenVLM dongles are plugged in.",
+			name: "msgNoDevices",
+			got:  msgNoDevices(),
+			want: "No OpenVLM devices are plugged in.",
 		},
 	}
 
@@ -99,19 +99,35 @@ func TestSuccessMessages(t *testing.T) {
 func TestForceWarning(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t,
-		"Warning: dongle's identity bit isn't set; continuing because --force was passed.",
+		"Warning: device's identity bit isn't set; continuing because --force was passed.",
 		msgForceWarning())
+}
+
+// TestPowerShellStdoutGuardMessage pins the wording of the
+// `openvlm read` PowerShell-stdout refusal so a future tone-tweak shows up
+// as a deliberate diff. The body must include the three remedies (-o, cmd
+// /c, --force-stdout) so the user is never left without an escape hatch.
+func TestPowerShellStdoutGuardMessage(t *testing.T) {
+	t.Parallel()
+
+	msg := errPowerShellStdoutGuard().Error()
+
+	assert.Contains(t, msg, "PowerShell")
+	assert.Contains(t, msg, "UTF-16")
+	assert.Contains(t, msg, "-o backup.bin")
+	assert.Contains(t, msg, "cmd /c")
+	assert.Contains(t, msg, "--force-stdout")
 }
 
 func TestChipBlank(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t,
-		"Warning: this dongle's configuration looks blank or corrupted.",
+		"Warning: this device's configuration looks blank or corrupted.",
 		msgChipBlank(false, 0x0D8C, 0x0012))
 
 	assert.Equal(t,
-		"Warning: this dongle's configuration looks blank or corrupted. (read VID:PID 0x0D8C:0x0012)",
+		"Warning: this device's configuration looks blank or corrupted. (read VID:PID 0x0D8C:0x0012)",
 		msgChipBlank(true, 0x0D8C, 0x0012))
 }
 
@@ -131,30 +147,30 @@ func TestFriendlyError_KnownSentinels(t *testing.T) {
 		{
 			name: "no devices",
 			err:  cm108.ErrNoDevice,
-			want: "No OpenVLM dongles are plugged in.\nPlug one in and try again.",
+			want: "No OpenVLM devices are plugged in.\nPlug one in and try again.",
 		},
 		{
 			name: "serial not found, wrapped",
 			err:  fmt.Errorf("%w: %q", cm108.ErrSerialNotFound, "ABC"),
-			want: "No dongle has the serial number you asked for.\n" +
+			want: "No device has the serial number you asked for.\n" +
 				"Run 'openvlm list' to see what's connected.",
 		},
 		{
 			name: "ambiguous device",
 			err:  fmt.Errorf("%w: 2 OpenVLM-strapped devices", cm108.ErrAmbiguousDevice),
-			want: "More than one dongle is plugged in.\n" +
+			want: "More than one device is plugged in.\n" +
 				"Use --serial <serial> to pick which one. Run 'openvlm list' to see them.",
 		},
 		{
 			name: "no strapped device",
 			err:  fmt.Errorf("%w: 2 CM108 devices, none strapped", cm108.ErrNoOpenVLMStrapped),
-			want: "Dongles are plugged in, but none of them are confirmed as OpenVLM.\n" +
-				"Use --force to program one anyway, or --serial <serial> to pick a specific dongle.",
+			want: "Devices are plugged in, but none of them are confirmed as OpenVLM.\n" +
+				"Use --force to program one anyway, or --serial <serial> to pick a specific device.",
 		},
 		{
 			name: "field locked",
 			err:  fmt.Errorf("%w: %q", eeprom.ErrFieldLocked, "vid"),
-			want: "That field is part of the dongle's identity and can't be changed by this tool.",
+			want: "That field is part of the device's identity and can't be changed by this tool.",
 		},
 		{
 			name: "hex input",
@@ -164,7 +180,7 @@ func TestFriendlyError_KnownSentinels(t *testing.T) {
 		{
 			name: "verify mismatch sentinel only, default",
 			err:  eeprom.ErrVerifyMismatch,
-			want: "The dongle accepted the write but read back a different value.\n" +
+			want: "The device accepted the write but read back a different value.\n" +
 				"Unplug it, plug it back in, and try the command once more.",
 		},
 	}
@@ -185,7 +201,7 @@ func TestFriendlyError_VerifyMismatchVerbose(t *testing.T) {
 
 	got := friendlyError(ve, true)
 	assert.Contains(t, got,
-		"The dongle accepted the write but read back a different value.")
+		"The device accepted the write but read back a different value.")
 	assert.Contains(t, got, "word 0x07")
 	assert.Contains(t, got, "wrote 0xCAFE")
 	assert.Contains(t, got, "read 0xBABE")

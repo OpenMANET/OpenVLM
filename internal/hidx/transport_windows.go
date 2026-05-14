@@ -5,6 +5,10 @@ package hidx
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -16,10 +20,14 @@ import (
 // No CGO and no third-party DLLs — only hid.dll and setupapi.dll, both
 // shipped by Windows itself.
 //
-// Enumeration uses the SetupDi* APIs to walk the HID interface class GUID,
-// then HidD_GetAttributes / HidD_GetSerialNumberString / HidD_GetProductString
-// to populate DeviceInfo. Open issues CreateFile against the device path,
-// and the two transfer methods call HidD_GetInputReport / HidD_SetOutputReport.
+// Enumeration walks the HID interface class GUID via the SetupDi* APIs.
+// VID/PID come from parsing the device interface path string the HID class
+// driver constructs from the USB device descriptor — opening the device is
+// not required and is the path that previously broke enumeration in user
+// contexts where CreateFile on the consumer-control collection was denied.
+// String fields (serial / product / manufacturer) are still read by opening
+// the device, but their failure is non-fatal: a DeviceInfo with empty strings
+// is still returned so the caller can see the device exists.
 type windowsBackend struct{}
 
 func newBackend() Backend { return &windowsBackend{} }
@@ -43,6 +51,15 @@ var (
 	procSetupDiDestroyDeviceInfoList     = setupAPIDLL.NewProc("SetupDiDestroyDeviceInfoList")
 )
 
+// hidPathVIDPID matches the vid_NNNN / pid_NNNN segments in a Windows HID
+// device interface path like
+// `\\?\HID#VID_0D8C&PID_0012&MI_03#7&abc&0&0000#{4d1e55b2-...}`.
+// Case-insensitive because Windows SDK versions are inconsistent across
+// `vid_` / `VID_` / `Vid_`.
+//
+//nolint:gochecknoglobals // package-level compiled regex per performance.md
+var hidPathVIDPID = regexp.MustCompile(`(?i)vid_([0-9a-f]{4}).*pid_([0-9a-f]{4})`)
+
 // SetupDi flags — values from SetupAPI.h.
 const (
 	digcfPresent         = 0x00000002
@@ -65,6 +82,31 @@ type spDeviceInterfaceData struct {
 	Reserved           uintptr
 }
 
+// parseVIDPIDFromPath extracts the USB VID and PID from a Windows HID device
+// interface path. The path is constructed by the HID class driver from the
+// USB device descriptor and is reliable without opening the device.
+//
+// Returns ok=false for paths that don't carry vid_/pid_ markers (e.g.
+// Bluetooth HID paths, which use a service-UUID format).
+func parseVIDPIDFromPath(path string) (vid, pid uint16, ok bool) {
+	m := hidPathVIDPID.FindStringSubmatch(path)
+	if len(m) != 3 {
+		return 0, 0, false
+	}
+
+	v, err := strconv.ParseUint(m[1], 16, 16)
+	if err != nil {
+		return 0, 0, false
+	}
+
+	p, err := strconv.ParseUint(m[2], 16, 16)
+	if err != nil {
+		return 0, 0, false
+	}
+
+	return uint16(v), uint16(p), true
+}
+
 func (b *windowsBackend) Enumerate(vendorID, productID uint16) ([]DeviceInfo, error) {
 	var hidGUID windows.GUID
 
@@ -84,11 +126,18 @@ func (b *windowsBackend) Enumerate(vendorID, productID uint16) ([]DeviceInfo, er
 
 	defer procSetupDiDestroyDeviceInfoList.Call(devInfoSet) //nolint:errcheck // best-effort cleanup
 
+	var dbg *log.Logger
+	if os.Getenv("OPENVLM_DEBUG") != "" {
+		dbg = log.New(os.Stderr, "openvlm: ", 0)
+	}
+
 	results := make([]DeviceInfo, 0, 4)
 
 	var (
-		index uint32
-		ifd   spDeviceInterfaceData
+		index                            uint32
+		ifd                              spDeviceInterfaceData
+		enumErrors                       []error
+		enumerated, matched, stringsRead int
 	)
 
 	ifd.CbSize = uint32(unsafe.Sizeof(ifd))
@@ -106,16 +155,60 @@ func (b *windowsBackend) Enumerate(vendorID, productID uint16) ([]DeviceInfo, er
 		}
 
 		index++
+		enumerated++
 
 		path, perr := getDeviceInterfacePath(devInfoSet, &ifd)
 		if perr != nil {
+			enumErrors = append(enumErrors, fmt.Errorf("path at index %d: %w", index-1, perr))
+
 			continue
 		}
 
-		// Best-effort: try to open the device read-only just to query its
-		// attributes; if that fails (permissions, in-use), skip it.
-		info, ierr := queryDevice(path)
-		if ierr != nil {
+		// Primary identification: parse VID/PID from the device path. The
+		// HID class driver constructs the path from the USB device
+		// descriptor, so this works without ever opening the device — the
+		// path that previously failed silently when CreateFile was denied.
+		if pathVID, pathPID, ok := parseVIDPIDFromPath(path); ok {
+			if vendorID != 0 && pathVID != vendorID {
+				continue
+			}
+
+			if productID != 0 && pathPID != productID {
+				continue
+			}
+
+			matched++
+
+			info := DeviceInfo{
+				Path:      path,
+				VendorID:  pathVID,
+				ProductID: pathPID,
+			}
+
+			// Best-effort: read string fields. The Backend contract
+			// promises devices the caller can't fully query are still
+			// returned, so a failure here only annotates enumErrors —
+			// the DeviceInfo still goes into results.
+			if got, serr := queryDeviceStrings(path); serr == nil {
+				info.SerialNumber = got.SerialNumber
+				info.ProductName = got.ProductName
+				info.ManufacturerName = got.ManufacturerName
+				stringsRead++
+			} else {
+				enumErrors = append(enumErrors, fmt.Errorf("read strings %s: %w", path, serr))
+			}
+
+			results = append(results, info)
+
+			continue
+		}
+
+		// Fallback for non-USB HID paths (Bluetooth, virtual HID, etc.):
+		// open the device and use HidD_GetAttributes for VID/PID.
+		info, qerr := queryDevice(path)
+		if qerr != nil {
+			enumErrors = append(enumErrors, fmt.Errorf("query %s: %w", path, qerr))
+
 			continue
 		}
 
@@ -128,7 +221,19 @@ func (b *windowsBackend) Enumerate(vendorID, productID uint16) ([]DeviceInfo, er
 		}
 
 		info.Path = path
+		matched++
+		stringsRead++
 		results = append(results, info)
+	}
+
+	if dbg != nil {
+		dbg.Printf("enumerated %d HID interface paths, matched %d by VID/PID, read strings for %d",
+			enumerated, matched, stringsRead)
+	}
+
+	if len(results) == 0 && len(enumErrors) > 0 {
+		return nil, fmt.Errorf("hidx: no devices found; %d enumeration error(s): %w",
+			len(enumErrors), errors.Join(enumErrors...))
 	}
 
 	return results, nil
@@ -229,14 +334,21 @@ func getDeviceInterfacePath(devInfoSet uintptr, ifd *spDeviceInterfaceData) (str
 		return "", errors.New("hidx: SetupDiGetDeviceInterfaceDetail returned zero size")
 	}
 
-	// SP_DEVICE_INTERFACE_DETAIL_DATA_W = { DWORD cbSize; WCHAR DevicePath[ANYSIZE_ARRAY]; }
-	// On 64-bit Windows the struct is 8-byte aligned, so cbSize must be 8.
-	// On 32-bit it's 6 (cbSize=DWORD + first WCHAR). We assume 64-bit since
-	// goreleaser only builds windows/amd64.
-	const headerSize = 8
+	// SP_DEVICE_INTERFACE_DETAIL_DATA_W layout:
+	//   DWORD cbSize;                       // offset 0, 4 bytes
+	//   WCHAR DevicePath[ANYSIZE_ARRAY];    // offset 4, variable length
+	//
+	// sizeof(struct) on amd64 is 8 (cbSize 4 + first WCHAR 2 + 2 trailing
+	// alignment bytes). The API requires cbSize == sizeof(struct), but the
+	// trailing alignment sits AFTER the first WCHAR — DevicePath itself
+	// still starts at byte offset 4. goreleaser only builds windows/amd64.
+	const (
+		cbSize     = 8 // sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) on amd64
+		pathOffset = 4 // byte offset of DevicePath member
+	)
 
 	buf := make([]byte, requiredSize)
-	*(*uint32)(unsafe.Pointer(&buf[0])) = headerSize
+	*(*uint32)(unsafe.Pointer(&buf[0])) = cbSize
 
 	ret, _, err := procSetupDiGetDeviceInterfaceDetailW.Call(
 		devInfoSet,
@@ -250,14 +362,27 @@ func getDeviceInterfacePath(devInfoSet uintptr, ifd *spDeviceInterfaceData) (str
 		return "", fmt.Errorf("hidx: SetupDiGetDeviceInterfaceDetail: %w", err)
 	}
 
-	pathBytes := buf[headerSize:]
-	pathU16 := unsafe.Slice((*uint16)(unsafe.Pointer(&pathBytes[0])), (len(pathBytes))/2)
+	return decodeDetailPath(buf[pathOffset:]), nil
+}
 
-	return windows.UTF16ToString(pathU16), nil
+// decodeDetailPath converts the WCHAR DevicePath bytes returned by
+// SetupDiGetDeviceInterfaceDetailW into a Go string. Split out from
+// getDeviceInterfacePath so the buffer-layout assumption is unit-testable
+// without going through the SetupAPI.
+func decodeDetailPath(pathBytes []byte) string {
+	if len(pathBytes) == 0 {
+		return ""
+	}
+
+	pathU16 := unsafe.Slice((*uint16)(unsafe.Pointer(&pathBytes[0])), len(pathBytes)/2)
+
+	return windows.UTF16ToString(pathU16)
 }
 
 // queryDevice opens the HID device just long enough to read its attributes
-// and identifying strings. Closes its own handle before returning.
+// and identifying strings. Closes its own handle before returning. Used as
+// the fallback for non-USB HID paths (Bluetooth, virtual HID, etc.) where
+// the path itself doesn't encode VID/PID.
 func queryDevice(path string) (DeviceInfo, error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
@@ -290,6 +415,38 @@ func queryDevice(path string) (DeviceInfo, error) {
 	return DeviceInfo{
 		VendorID:         attrs.VendorID,
 		ProductID:        attrs.ProductID,
+		SerialNumber:     readHidString(handle, procHidDGetSerialNumberString),
+		ProductName:      readHidString(handle, procHidDGetProductString),
+		ManufacturerName: readHidString(handle, procHidDGetManufacturerString),
+	}, nil
+}
+
+// queryDeviceStrings opens the HID device just long enough to read its
+// serial / product / manufacturer strings. Called when VID/PID have already
+// been parsed from the device path, so HidD_GetAttributes is not needed.
+// Failure here is non-fatal at the caller — strings are best-effort.
+func queryDeviceStrings(path string) (DeviceInfo, error) {
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return DeviceInfo{}, err //nolint:wrapcheck // direct pass-through of UTF16 error
+	}
+
+	handle, err := windows.CreateFile(
+		pathPtr,
+		0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
+		nil,
+		windows.OPEN_EXISTING,
+		0,
+		0,
+	)
+	if err != nil {
+		return DeviceInfo{}, fmt.Errorf("CreateFile: %w", err)
+	}
+
+	defer windows.CloseHandle(handle) //nolint:errcheck // best-effort cleanup
+
+	return DeviceInfo{
 		SerialNumber:     readHidString(handle, procHidDGetSerialNumberString),
 		ProductName:      readHidString(handle, procHidDGetProductString),
 		ManufacturerName: readHidString(handle, procHidDGetManufacturerString),

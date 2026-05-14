@@ -357,7 +357,7 @@ func TestIdentify_FriendlySuccess(t *testing.T) {
 
 	stdout, _, err := runRoot(t, "identify")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "this is an OpenVLM dongle")
+	assert.Contains(t, stdout, "this is an OpenVLM device")
 }
 
 // TestUpdate_FriendlySuccess pins the updated-field line.
@@ -396,9 +396,9 @@ func TestProvision_DryRunFriendlyMessage(t *testing.T) {
 	assert.Contains(t, stderr, "No changes made.")
 }
 
-// TestNoDongles_FriendlyError verifies the cm108.ErrNoDevice translation
+// TestNoDevices_FriendlyError verifies the cm108.ErrNoDevice translation
 // fires end-to-end, with the action hint appended.
-func TestNoDongles_FriendlyError(t *testing.T) {
+func TestNoDevices_FriendlyError(t *testing.T) {
 	// Empty fake backend — no devices registered.
 	prev := SetBackend(hidx.NewFakeBackend())
 
@@ -411,7 +411,7 @@ func TestNoDongles_FriendlyError(t *testing.T) {
 	require.Error(t, err)
 
 	got := friendlyError(err, false)
-	assert.Contains(t, got, "No OpenVLM dongles are plugged in")
+	assert.Contains(t, got, "No OpenVLM devices are plugged in")
 	assert.Contains(t, got, "Plug one in")
 }
 
@@ -427,7 +427,7 @@ func TestStrapLow_FriendlyError(t *testing.T) {
 	require.Error(t, err)
 
 	got := friendlyError(err, false)
-	assert.Contains(t, got, "this doesn't look like an OpenVLM dongle")
+	assert.Contains(t, got, "this doesn't look like an OpenVLM device")
 }
 
 // TestVerbose_PreservesInternalDetail confirms --verbose surfaces the

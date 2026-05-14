@@ -1,6 +1,6 @@
 # openvlm CLI Reference
 
-Complete user reference for `openvlm`, the cross-platform CLI for reading, writing, and validating the EEPROM on **OpenVLM USB audio dongles**.
+Complete user reference for `openvlm`, the cross-platform CLI for reading, writing, and validating the EEPROM on **OpenVLM USB audio devices**.
 
 ---
 
@@ -34,24 +34,24 @@ Complete user reference for `openvlm`, the cross-platform CLI for reading, writi
 
 ## Overview
 
-`openvlm` programs the on-board EEPROM of OpenVLM USB audio dongles. The hardware is a **C-Media CM108B** USB audio chip wired to a **93C46 SPI EEPROM** (64 × 16-bit words, 128 bytes total), with a **GPIO1 hardware strap** that distinguishes OpenVLM-branded dongles from generic CM108-family devices.
+`openvlm` programs the on-board EEPROM of OpenVLM USB audio devices. The hardware is a **C-Media CM108B** USB audio chip wired to a **93C46 SPI EEPROM** (64 × 16-bit words, 128 bytes total), with a **GPIO1 hardware strap** that distinguishes OpenVLM-branded devices from generic CM108-family devices.
 
 The CLI talks to the chip exclusively over USB-HID class control transfers — there is no kernel driver, no vendor blob, and no platform-specific cable. The same binary runs on Linux, macOS, and Windows.
 
 What it does:
 
-- Enumerates and identifies attached dongles
+- Enumerates and identifies attached devices
 - Reads / writes the 128-byte EEPROM image
 - Decodes the image into a typed view (volumes, USB descriptors, analog config)
 - Validates every field before any HID transfer
-- Provisions a fresh dongle with canonical OpenVLM defaults
-- Wipes a dongle back to factory-blank state
+- Provisions a fresh device with canonical OpenVLM defaults
+- Wipes a device back to factory-blank state
 
 What it does **not** do:
 
-- It does not change a dongle's USB VID/PID (write-locked to `0x0D8C:0x0012`)
+- It does not change a device's USB VID/PID (write-locked to `0x0D8C:0x0012`)
 - It does not change the product / manufacturer strings (write-locked to `OpenVLM` / `BuildsByShane`)
-- It does not work on non-OpenVLM CM108-family dongles unless `--force` is passed
+- It does not work on non-OpenVLM CM108-family devices unless `--force` is passed
 
 ---
 
@@ -149,10 +149,10 @@ Layering rule: `cmd` calls into `eeprom` and `cm108`; both call into `hidx`. `hi
 # 1. See what's plugged in
 openvlm list
 
-# 2. Confirm the device is an OpenVLM dongle (GPIO1 strap probe)
+# 2. Confirm the device is an OpenVLM device (GPIO1 strap probe)
 openvlm identify
 
-# 3. Program canonical OpenVLM defaults onto a fresh dongle
+# 3. Program canonical OpenVLM defaults onto a fresh device
 openvlm provision --serial "00001234"
 
 # 4. Inspect the live EEPROM as YAML
@@ -183,7 +183,7 @@ flowchart TD
     F -- no --> E4[ErrAmbiguousDevice<br/>exit 1]
 ```
 
-Use `--serial <value>` to disambiguate when more than one dongle is plugged in.
+Use `--serial <value>` to disambiguate when more than one device is plugged in.
 
 ---
 
@@ -193,7 +193,7 @@ These flags are accepted by every subcommand:
 
 | Flag             | Default | Description |
 |------------------|---------|-------------|
-| `--serial <str>` | _empty_ | Pick the device whose USB serial-number string equals this value. Required when more than one dongle is attached. |
+| `--serial <str>` | _empty_ | Pick the device whose USB serial-number string equals this value. Required when more than one device is attached. |
 | `-v, --verbose`  | `false` | Log every HID transfer to stderr. Use for diagnosing transport-level issues. |
 
 ---
@@ -399,7 +399,7 @@ openvlm update dac-output headset
 openvlm provision [--overrides <file>] [--<field> <value>]... [--dry-run] [--force]
 ```
 
-Write the compiled-in `OpenVLMDefaults` image to the device, optionally with overrides. This is the canonical command for programming a fresh dongle.
+Write the compiled-in `OpenVLMDefaults` image to the device, optionally with overrides. This is the canonical command for programming a fresh device.
 
 **Flags:**
 
@@ -407,7 +407,7 @@ Write the compiled-in `OpenVLMDefaults` image to the device, optionally with ove
 |-----------------|---------|-------------|
 | `--overrides <file>` | _empty_ | YAML file with a subset of fields to override compiled defaults. |
 | `--dry-run`     | `false` | Encode and validate the image, print it as hex, and exit without touching the device. |
-| `--force`       | `false` | Bypass the GPIO1 strap safety gate. Required for fresh dongles whose strap has not yet been latched. |
+| `--force`       | `false` | Bypass the GPIO1 strap safety gate. Required for fresh devices whose strap has not yet been latched. |
 
 Plus one CLI flag per overridable field — see the [EEPROM field reference](#eeprom-field-reference).
 
@@ -435,7 +435,7 @@ openvlm provision --overrides factory.yaml --dac-init-volume -6
 # Validate an image without writing it
 openvlm provision --overrides factory.yaml --dry-run
 
-# Bootstrap a fresh, never-programmed dongle
+# Bootstrap a fresh, never-programmed device
 openvlm provision --force
 ```
 
@@ -600,7 +600,7 @@ openvlm dump --format yaml | openvlm write -i -
 
 ```bash
 openvlm read -o backup.bin
-# ...time passes, dongle is reflashed or moved...
+# ...time passes, device is reflashed or moved...
 openvlm write -i backup.bin
 ```
 
@@ -613,7 +613,7 @@ openvlm provision --overrides config.yaml
 
 YAML is human-readable and portable across hardware revisions; raw binary is bit-exact.
 
-### Provision a brand-new dongle
+### Provision a brand-new device
 
 A virgin chip's GPIO1 strap reads low until it has been programmed at least once. The `--force` bypass is required for the first program cycle:
 
@@ -639,7 +639,7 @@ $EDITOR current.yaml
 openvlm provision --overrides current.yaml
 ```
 
-### Reset a dongle to factory blank
+### Reset a device to factory blank
 
 ```bash
 openvlm wipe --yes
@@ -661,9 +661,9 @@ Catches every validation error and prints the would-be image as hex; never touch
 
 ### `no OpenVLM devices found`
 
-- Verify the dongle is plugged in: `lsusb | grep 0d8c:0012` (Linux) or System Information → USB (macOS).
+- Verify the device is plugged in: `lsusb | grep 0d8c:0012` (Linux) or System Information → USB (macOS).
 - On Linux, check udev rules — the user must have read/write access to `/dev/hidrawN` for the OpenVLM VID/PID. See [Platform requirements](#platform-requirements).
-- The CLI matches strictly on VID `0x0D8C` and PID `0x0012`. Generic CM108-family dongles with different PIDs are not enumerated.
+- The CLI matches strictly on VID `0x0D8C` and PID `0x0012`. Generic CM108-family devices with different PIDs are not enumerated.
 
 ### `ambiguous device` / multiple matches
 
@@ -678,9 +678,9 @@ openvlm provision --serial "00001234"
 
 The selected device's GPIO1 strap reads low. This means either:
 
-- The dongle is not actually OpenVLM hardware (a generic CM108 dongle that happens to share the VID/PID).
-- The dongle is OpenVLM hardware but has never been programmed (virgin chips read low). Use `--force` to bootstrap.
-- The dongle was wiped recently and the strap latch is no longer set. Use `--force` to re-provision.
+- The device is not actually OpenVLM hardware (a generic CM108 device that happens to share the VID/PID).
+- The device is OpenVLM hardware but has never been programmed (virgin chips read low). Use `--force` to bootstrap.
+- The device was wiped recently and the strap latch is no longer set. Use `--force` to re-provision.
 
 ### macOS — transient HID errors during long writes
 

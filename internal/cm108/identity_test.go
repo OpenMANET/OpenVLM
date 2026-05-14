@@ -123,7 +123,7 @@ func TestPick_NoStrappedDevices(t *testing.T) {
 }
 
 // TestPick_SingleUnstrappedDevice still picks the device when it's the only
-// CM108 attached — useful for `provision --force` on a fresh dongle.
+// CM108 attached — useful for `provision --force` on a fresh device.
 func TestPick_SingleUnstrappedDevice(t *testing.T) {
 	t.Parallel()
 

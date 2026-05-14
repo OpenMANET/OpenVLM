@@ -72,9 +72,9 @@ func requireOpenVLM(d cm108.Descriptor, force bool) error {
 
 	name := displayName(d.SerialNumber, d.Path)
 
-	reason := "this doesn't look like an OpenVLM dongle (its identity bit isn't set)"
+	reason := "this doesn't look like an OpenVLM device (its identity bit isn't set)"
 	if d.ProbeError != nil {
-		reason = "couldn't check the dongle's identity bit: " + d.ProbeError.Error()
+		reason = "couldn't check the device's identity bit: " + d.ProbeError.Error()
 	}
 
 	return &notIdentifiedError{

@@ -39,6 +39,15 @@ const (
 	// slow.
 	readPaceDelay = 1 * time.Millisecond
 
+	// readExecuteDelay is the gap between the SetOutputReport that issues
+	// the EEPROM-read command and the GetInputReport that fetches the
+	// result. The CM108B's internal SPI bus must clock 16 bits out of the
+	// 93C46 before HID_IR2/IR3 hold the requested word — without this
+	// delay, GetInputReport races the chip and returns stale buffer data
+	// (different bytes on every read; reproducible on Windows). The
+	// Linux hid-cm108 driver uses 1..2 ms here; we use 2 ms for margin.
+	readExecuteDelay = 2 * time.Millisecond
+
 	// preVerifyDelay paces the gap between WriteWord's tWP sleep and the
 	// next verify ReadWord transfer in WriteAll. Same IOKit blip class as
 	// readPaceDelay but on the write→read transition; without this, a
@@ -148,6 +157,10 @@ func ReadWord(t hidx.Transport, addr uint8) (uint16, error) {
 	if err := setOutputReportRetry(t, 0, out); err != nil {
 		return 0, fmt.Errorf("eeprom: ReadWord 0x%02X: send output: %w", addr, err)
 	}
+
+	// Wait for the chip to clock the 16-bit word out of the 93C46 SPI
+	// EEPROM into HID_IR2/IR3 before fetching it. See readExecuteDelay.
+	time.Sleep(readExecuteDelay)
 
 	in := make([]byte, reportLen)
 	if err := getInputReportRetry(t, 0, in); err != nil {
