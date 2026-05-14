@@ -32,7 +32,7 @@ func runIdentify(cmd *cobra.Command, _ []string) error {
 
 	if !d.IsOpenVLM {
 		return &notIdentifiedError{
-			err: fmt.Errorf("%s: this doesn't look like an OpenVLM dongle (its identity bit isn't set)",
+			err: fmt.Errorf("%s: this doesn't look like an OpenVLM device (its identity bit isn't set)",
 				name),
 		}
 	}

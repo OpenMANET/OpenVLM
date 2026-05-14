@@ -1,7 +1,7 @@
 package eeprom
 
 // OpenVLMDefaults is the canonical EEPROM image programmed onto OpenVLM
-// dongles at the factory.
+// devices at the factory.
 //
 // Edit this struct literal to retune defaults for new hardware revisions.
 // Runtime overrides (YAML files and per-field CLI flags on

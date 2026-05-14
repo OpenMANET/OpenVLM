@@ -334,14 +334,21 @@ func getDeviceInterfacePath(devInfoSet uintptr, ifd *spDeviceInterfaceData) (str
 		return "", errors.New("hidx: SetupDiGetDeviceInterfaceDetail returned zero size")
 	}
 
-	// SP_DEVICE_INTERFACE_DETAIL_DATA_W = { DWORD cbSize; WCHAR DevicePath[ANYSIZE_ARRAY]; }
-	// On 64-bit Windows the struct is 8-byte aligned, so cbSize must be 8.
-	// On 32-bit it's 6 (cbSize=DWORD + first WCHAR). We assume 64-bit since
-	// goreleaser only builds windows/amd64.
-	const headerSize = 8
+	// SP_DEVICE_INTERFACE_DETAIL_DATA_W layout:
+	//   DWORD cbSize;                       // offset 0, 4 bytes
+	//   WCHAR DevicePath[ANYSIZE_ARRAY];    // offset 4, variable length
+	//
+	// sizeof(struct) on amd64 is 8 (cbSize 4 + first WCHAR 2 + 2 trailing
+	// alignment bytes). The API requires cbSize == sizeof(struct), but the
+	// trailing alignment sits AFTER the first WCHAR — DevicePath itself
+	// still starts at byte offset 4. goreleaser only builds windows/amd64.
+	const (
+		cbSize     = 8 // sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) on amd64
+		pathOffset = 4 // byte offset of DevicePath member
+	)
 
 	buf := make([]byte, requiredSize)
-	*(*uint32)(unsafe.Pointer(&buf[0])) = headerSize
+	*(*uint32)(unsafe.Pointer(&buf[0])) = cbSize
 
 	ret, _, err := procSetupDiGetDeviceInterfaceDetailW.Call(
 		devInfoSet,
@@ -355,10 +362,21 @@ func getDeviceInterfacePath(devInfoSet uintptr, ifd *spDeviceInterfaceData) (str
 		return "", fmt.Errorf("hidx: SetupDiGetDeviceInterfaceDetail: %w", err)
 	}
 
-	pathBytes := buf[headerSize:]
-	pathU16 := unsafe.Slice((*uint16)(unsafe.Pointer(&pathBytes[0])), (len(pathBytes))/2)
+	return decodeDetailPath(buf[pathOffset:]), nil
+}
 
-	return windows.UTF16ToString(pathU16), nil
+// decodeDetailPath converts the WCHAR DevicePath bytes returned by
+// SetupDiGetDeviceInterfaceDetailW into a Go string. Split out from
+// getDeviceInterfacePath so the buffer-layout assumption is unit-testable
+// without going through the SetupAPI.
+func decodeDetailPath(pathBytes []byte) string {
+	if len(pathBytes) == 0 {
+		return ""
+	}
+
+	pathU16 := unsafe.Slice((*uint16)(unsafe.Pointer(&pathBytes[0])), len(pathBytes)/2)
+
+	return windows.UTF16ToString(pathU16)
 }
 
 // queryDevice opens the HID device just long enough to read its attributes

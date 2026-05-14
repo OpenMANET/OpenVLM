@@ -33,7 +33,7 @@ var wipeCmd = &cobra.Command{
 func runWipe(cmd *cobra.Command, _ []string) error {
 	if !wipeYes {
 		return &usageError{err: fmt.Errorf(
-			"wipe needs --yes to run. This erases the dongle's configuration; the flag is the confirmation")}
+			"wipe needs --yes to run. This erases the device's configuration; the flag is the confirmation")}
 	}
 
 	pattern, err := parseWipePattern(wipePattern)

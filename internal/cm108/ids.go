@@ -17,7 +17,7 @@ const (
 	OpenVLMVendorID uint16 = 0x0D8C
 
 	// OpenVLMProductID identifies the OpenVLM (Open Voice Link Module) USB
-	// audio dongle. It is the factory-default CM108B PID; programming a
+	// audio device. It is the factory-default CM108B PID; programming a
 	// different PID would prevent this CLI from finding the device, which
 	// is why VID/PID are write-locked (see the plan, "VID/PID are
 	// write-locked").

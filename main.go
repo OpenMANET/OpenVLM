@@ -1,5 +1,5 @@
 // Command openvlm is the cross-platform CLI for reading, writing, and
-// validating the EEPROM on OpenVLM USB audio dongles (C-Media CM108B with a
+// validating the EEPROM on OpenVLM USB audio devices (C-Media CM108B with a
 // GPIO1 hardware strap).
 //
 // See `openvlm --help` for the full subcommand reference.

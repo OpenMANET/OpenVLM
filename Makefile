@@ -48,6 +48,10 @@ build: fmt vet ## Build the openvlm CLI binary.
 cgobuild: fmt vet ## Build the openvlm CLI binary with CGO_ENABLED=1.
 	CGO_ENABLED=1 GOCACHE=$(HOME)/.gocache go build -trimpath -buildvcs=false -ldflags="-s -w" -o bin/openvlm .
 
+.PHONY: build-windows
+build-windows: fmt vet ## Build the openvlm CLI binary.
+	GOOS=windows CGO_ENABLED=0 GOCACHE=$(HOME)/.gocache go build -trimpath -buildvcs=false -ldflags="-s -w" -o bin/openvlm.exe .
+
 .PHONY: run
 run: fmt vet ## Run the CLI from your host (forwards args via ARGS=...).
 	go run . $(ARGS)
