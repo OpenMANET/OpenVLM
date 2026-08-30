@@ -20,13 +20,14 @@ These facts are not in the datasheet but are required to read the code correctly
 
 ## Datasheet pinning issues (open)
 
-Three load-bearing assumptions in the codec are unverified against real hardware. They need a one-time bench gate (see [.claude/plans/review-the-last-implementation-wise-rossum.md](.claude/plans/review-the-last-implementation-wise-rossum.md) Phase G):
+Two load-bearing assumptions in the codec are unverified against real hardware and still need a one-time bench gate:
 
 1. **`EEPROM_CTRL` bit layout.** Datasheet §7.4 names the register but never documents `op<<6 | addr` — that's the convention we copied from Linux `hid-cm108`.
 2. **String body byte order in body words.** Datasheet specifies the header word's byte order, not the body words.
-3. **Init-volume encoding (two's complement vs. offset-binary).** Currently two's complement; datasheet §8.3's step counts strongly imply offset-binary. Validator is narrowed defensively (intersection of doc range and 5/6/7-bit two's-complement faithful range) so values that would silently corrupt are rejected.
 
-If you touch volume encoding or string parsing, read that plan file first.
+A third assumption — init-volume encoding — was bench-confirmed 2026-04-30: the fields are attenuation-encoded (`bits = maxDB - value`, bits 0 = loudest). Two's complement and offset-binary were both tried on hardware and rejected; see the comment above the word-0x2A constants in [internal/eeprom/layout.go](internal/eeprom/layout.go).
+
+If you touch string parsing, flag any byte-order ambiguity as a bench question rather than papering over it with assumptions.
 
 ## Architecture
 
@@ -119,7 +120,7 @@ Project-specific additions:
 
 ## Memory bug class to watch for
 
-Init-volume validator + encoder pairing. The encoder uses two's complement on bit fields of widths 5/6/7. The validator must accept only values that fit the bit-field's two's-complement range, OR the encoding must be widened (offset-binary) before the validator allows wider values. Decoupling these silently corrupts on hardware. See [internal/eeprom/validate.go](internal/eeprom/validate.go) `aaInitMin/Max` etc. for the current intersection.
+Init-volume validator + encoder pairing. The encoder is attenuation-encoded (`bits = maxDB - value`, bench-confirmed 2026-04-30) on bit fields of widths 7/6/5, and the validator accepts exactly the datasheet §8.3 ranges, which that encoding represents faithfully. If either side changes, both must move together — decoupling them silently corrupts on hardware. The `maxDB` anchors live in [internal/eeprom/layout.go](internal/eeprom/layout.go) (`dac/adc/aaInitMaxDB`); the accepted ranges live in [internal/eeprom/validate.go](internal/eeprom/validate.go) (`dac/adc/aaInitMin/Max`).
 
 ## Memory and persistence
 

@@ -513,9 +513,9 @@ These are the user-facing fields. Each one is settable via YAML, via `openvlm up
 | `serial` | string | ≤12 printable ASCII (0x20–0x7E) | `""` | USB serial-number string. |
 | `serial-enable` | bool | true / false | `false` | Present the USB serial-number string descriptor. |
 | `extended-fields-valid` | bool | true / false | `true` | Mark words 0x2A / 0x2B / 0x32 fields as valid. Must be `true` for the chip to honor any of the volume / analog config below. |
-| `dac-init-volume` | int (dB) | -37..0 | `-10` | Playback initial volume. |
+| `dac-init-volume` | int (dB) | -37..0 | `0` | Playback initial volume. |
 | `adc-init-volume` | int (dB) | -12..23 | `8` | Recording initial volume. |
-| `aa-init-volume` | int (dB) | -16..8 | `-7` | Analog mixer (sidetone) initial volume. **Range narrowed from datasheet -23..8** — see "Encoding caveat" below. |
+| `aa-init-volume` | int (dB) | -23..8 | `-7` | Analog mixer (sidetone) initial volume. |
 | `dac-min-volume` | int (dB) | -128..127 | `-37` | Playback minimum. |
 | `dac-max-volume` | int (dB) | -128..127 | `0` | Playback maximum. |
 | `dac-max-min-volume-valid` | bool | true / false | `false` | Honor `dac-min-volume` / `dac-max-volume` from EEPROM. |
@@ -551,7 +551,7 @@ These are the user-facing fields. Each one is settable via YAML, via `openvlm up
 
 **Numeric input format:** decimal only. The `0x`, `0o`, and `0b` prefixes are explicitly rejected with the message `hex/binary/octal numeric input is not accepted; use decimal`. This applies to `update`, per-field flags, and YAML.
 
-**Encoding caveat for `aa-init-volume`:** the datasheet documents a -23..8 dB range, but the current encoder uses a 5-bit two's-complement field (range -16..15). The validator deliberately accepts only -16..8, the intersection of the datasheet range and the encoder's faithful range, so values that would silently corrupt cannot be programmed. The two encoded values 9..15 are rejected as out-of-datasheet; -23..-17 are rejected as out-of-encoder. This narrowing will be revisited once the encoding is verified on real hardware.
+**Encoding note for the init volumes:** `dac-init-volume`, `adc-init-volume`, and `aa-init-volume` are stored in EEPROM as attenuation steps below each field's maximum (bits = max dB − value, bits 0 = loudest). This encoding was confirmed on real hardware on 2026-04-30, so the full datasheet ranges shown in the table are accepted as-is.
 
 ---
 
