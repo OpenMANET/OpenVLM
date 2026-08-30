@@ -43,7 +43,7 @@ var OpenVLMDefaults = View{
 	MicHighPassFilter: true,
 	MicPLLAdjust:      false,
 	MicBoost:          true,
-	DACOutput:         DACOutputHeadset,
+	DACOutput:         DACOutputSpeaker,
 	HIDEnable:         true,
 	RemoteWakeup:      false,
 
